@@ -10,8 +10,8 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * 铁材质 + 金线的空心线框按钮。
- * 全部用整数矩形填充绘制：描边会落在半像素上并触发抗锯齿，1 格粗的线会变 3px 或发灰。
+ * 铁材质空心线框按钮：3 格铁框斜面 + 1 格金线 + 同灰色内板（顶/左高光、底/右阴影做凸起）。
+ * 全部用整数矩形填充：描边会落在半像素上并触发抗锯齿，1 格粗的线会变 3px 或发灰。
  * 单位为 2dp 一格，所有边缘都落在格线上。
  */
 class PixelButton @JvmOverloads constructor(
@@ -30,13 +30,12 @@ class PixelButton @JvmOverloads constructor(
     var ironMid: Int = Color.parseColor("#6E7480")
     var ironDark: Int = Color.parseColor("#454A54")
     var gold: Int = Color.parseColor("#D9A441")
-    var goldLight: Int = Color.parseColor("#F2CD78")
-    var goldDark: Int = Color.parseColor("#8C6420")
 
     init {
         isClickable = true
         isFocusable = true
         setWillNotDraw(false)
+        minimumHeight = MIN_ROWS * unit
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -58,7 +57,7 @@ class PixelButton @JvmOverloads constructor(
         val w = width
         val h = height
 
-        // 铁框：上/左外缘亮、下/右外缘暗，模拟左上打光
+        // 铁外框 3 格：上/左外缘亮、下/右外缘暗，模拟左上打光
         fill(canvas, 0, 0, w, u, ironLight)
         fill(canvas, 0, u, w, 2 * u, ironMid)
         fill(canvas, 0, 2 * u, w, 3 * u, ironDark)
@@ -72,11 +71,18 @@ class PixelButton @JvmOverloads constructor(
         fill(canvas, w - 2 * u, 3 * u, w - u, h - 3 * u, ironMid)
         fill(canvas, w - 3 * u, 3 * u, w - 2 * u, h - 3 * u, ironLight)
 
-        // 金线：铁框内侧 1 格
+        // 金线 1 格
         fill(canvas, 3 * u, 3 * u, w - 3 * u, 4 * u, gold)
         fill(canvas, 3 * u, h - 4 * u, w - 3 * u, h - 3 * u, gold)
         fill(canvas, 3 * u, 4 * u, 4 * u, h - 4 * u, gold)
         fill(canvas, w - 4 * u, 4 * u, w - 3 * u, h - 4 * u, gold)
+
+        // 内板：同铁灰，顶/左 1 格高光、底/右 1 格阴影，做出中心凸起
+        fill(canvas, 4 * u, 4 * u, w - 4 * u, h - 4 * u, ironMid)
+        fill(canvas, 4 * u, 4 * u, w - 4 * u, 5 * u, ironLight)
+        fill(canvas, 4 * u, 5 * u, 5 * u, h - 5 * u, ironLight)
+        fill(canvas, 4 * u, h - 5 * u, w - 4 * u, h - 4 * u, ironDark)
+        fill(canvas, w - 5 * u, 5 * u, w - 4 * u, h - 5 * u, ironDark)
 
         // 四角铆钉：2×2 格，右下 1 格压暗
         rivet(canvas, u, u)
@@ -86,8 +92,8 @@ class PixelButton @JvmOverloads constructor(
     }
 
     private fun rivet(canvas: Canvas, left: Int, top: Int) {
-        fill(canvas, left, top, left + 2 * unit, top + 2 * unit, goldLight)
-        fill(canvas, left + unit, top + unit, left + 2 * unit, top + 2 * unit, goldDark)
+        fill(canvas, left, top, left + 2 * unit, top + 2 * unit, ironLight)
+        fill(canvas, left + unit, top + unit, left + 2 * unit, top + 2 * unit, ironDark)
     }
 
     private fun fill(canvas: Canvas, l: Int, t: Int, r: Int, b: Int, color: Int) {
@@ -97,5 +103,6 @@ class PixelButton @JvmOverloads constructor(
 
     companion object {
         private const val GRID_DP = 2f
+        private const val MIN_ROWS = 32
     }
 }
