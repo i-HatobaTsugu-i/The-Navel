@@ -65,15 +65,16 @@ class MainActivity : Activity() {
             (640 * dp).toInt()
         )
 
-        val labels = listOf("新游戏", "载入", "模组", "设置", "退出")
+        val labels = listOf("新游戏", "载入", "编辑器", "模组", "设置", "鸣谢", "退出")
         labels.chunked(3).forEachIndexed { rowIndex, row ->
             val rowLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
             row.forEach { label ->
                 val button = menuButton(label)
-                if (label == "退出") {
-                    button.setOnClickListener { finishAffinity() }
+                when (label) {
+                    "退出" -> button.setOnClickListener { finishAffinity() }
+                    "鸣谢" -> button.setOnClickListener { showCredits() }
                 }
                 rowLayout.addView(button, LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -188,6 +189,52 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT))
 
         root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
+            gravity = Gravity.CENTER
+        })
+
+        setContentView(root)
+        hideSystemBars()
+    }
+
+    private fun showCredits() {
+        val dp = resources.displayMetrics.density
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#10141A"))
+        }
+        val panelWidth = min(
+            (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
+            (420 * dp).toInt()
+        )
+
+        val panel = PaperPanel(this).apply {
+            val padH = (20 * dp).toInt()
+            setPadding(padH, (18 * dp).toInt(), padH, (18 * dp).toInt())
+        }
+
+        val text = PaperTextView(this).apply {
+            text = "代码:Deepseek大肥鱼\n美工:Deepseek大肥鱼,鳩羽つぐ"
+            textSize = 16f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding((8 * dp).toInt(), 0, 0, (8 * dp).toInt())
+        }
+
+        val back = menuButton("返回").apply { setOnClickListener { showMenu() } }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(back, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (12 * dp).toInt()
+            })
+        }
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+
+        root.addView(panel, FrameLayout.LayoutParams(
+            panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.CENTER
         })
 

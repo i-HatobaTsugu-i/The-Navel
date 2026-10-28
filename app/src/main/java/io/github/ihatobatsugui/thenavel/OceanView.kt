@@ -77,12 +77,12 @@ class OceanView @JvmOverloads constructor(
 
                 val mask = smoothStep(0.48f, 0.68f, patch)
                 val f = 0.55f * patch + 0.45f * tex
-                val density = max(0f, (f - 0.50f) / 0.20f) * mask
+                val density = max(0f, (f - 0.54f) / 0.20f) * mask
 
                 val r = hash01(i, j, stamp)
                 pixels[index++] = when {
-                    r < density * 0.65f -> FOAM
-                    r < density * 1.05f -> blend(water, FOAM_DIM, 0.6f)
+                    r < density * 0.42f -> FOAM
+                    r < density * 0.80f -> blend(water, FOAM_DIM, 0.6f)
                     else -> water
                 }
             }
