@@ -26,8 +26,9 @@ class MainActivity : Activity() {
                 setTextColor(Color.WHITE)
                 frameColor = Color.WHITE
                 frameColorPressed = Color.parseColor("#FFD166")
-                val pad = (6 * dp).toInt()
-                setPadding(pad, pad, pad, pad)
+                val padH = (10 * dp).toInt()
+                val padV = (6 * dp).toInt()
+                setPadding(padH, padV, padH, padV)
             }
             root.addView(button, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,

@@ -10,9 +10,9 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * 空心线框按钮：线宽固定 1 个像素格（2dp），直角，中心透明。
- * 线框用四条实心矩形拼出来而不是 drawRect 描边——描边会落在半像素上并触发抗锯齿，
- * 在 1 格粗的线上会变成灰边或 3px 粗。
+ * 铁材质 + 金线的空心线框按钮。
+ * 全部用整数矩形填充绘制：描边会落在半像素上并触发抗锯齿，1 格粗的线会变 3px 或发灰。
+ * 单位为 2dp 一格，所有边缘都落在格线上。
  */
 class PixelButton @JvmOverloads constructor(
     context: Context,
@@ -26,8 +26,12 @@ class PixelButton @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
 
-    var frameColor: Int = Color.WHITE
-    var frameColorPressed: Int = Color.WHITE
+    var ironLight: Int = Color.parseColor("#9AA1AC")
+    var ironMid: Int = Color.parseColor("#6E7480")
+    var ironDark: Int = Color.parseColor("#454A54")
+    var gold: Int = Color.parseColor("#D9A441")
+    var goldLight: Int = Color.parseColor("#F2CD78")
+    var goldDark: Int = Color.parseColor("#8C6420")
 
     init {
         isClickable = true
@@ -50,14 +54,45 @@ class PixelButton @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        paint.color = if (isPressed) frameColorPressed else frameColor
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val t = unit.toFloat()
-        canvas.drawRect(0f, 0f, w, t, paint)
-        canvas.drawRect(0f, h - t, w, h, paint)
-        canvas.drawRect(0f, 0f, t, h, paint)
-        canvas.drawRect(w - t, 0f, w, h, paint)
+        val u = unit
+        val w = width
+        val h = height
+
+        // 铁框：上/左外缘亮、下/右外缘暗，模拟左上打光
+        fill(canvas, 0, 0, w, u, ironLight)
+        fill(canvas, 0, u, w, 2 * u, ironMid)
+        fill(canvas, 0, 2 * u, w, 3 * u, ironDark)
+        fill(canvas, 0, h - u, w, h, ironDark)
+        fill(canvas, 0, h - 2 * u, w, h - u, ironMid)
+        fill(canvas, 0, h - 3 * u, w, h - 2 * u, ironLight)
+        fill(canvas, 0, 3 * u, u, h - 3 * u, ironLight)
+        fill(canvas, u, 3 * u, 2 * u, h - 3 * u, ironMid)
+        fill(canvas, 2 * u, 3 * u, 3 * u, h - 3 * u, ironDark)
+        fill(canvas, w - u, 3 * u, w, h - 3 * u, ironDark)
+        fill(canvas, w - 2 * u, 3 * u, w - u, h - 3 * u, ironMid)
+        fill(canvas, w - 3 * u, 3 * u, w - 2 * u, h - 3 * u, ironLight)
+
+        // 金线：铁框内侧 1 格
+        fill(canvas, 3 * u, 3 * u, w - 3 * u, 4 * u, gold)
+        fill(canvas, 3 * u, h - 4 * u, w - 3 * u, h - 3 * u, gold)
+        fill(canvas, 3 * u, 4 * u, 4 * u, h - 4 * u, gold)
+        fill(canvas, w - 4 * u, 4 * u, w - 3 * u, h - 4 * u, gold)
+
+        // 四角铆钉：2×2 格，右下 1 格压暗
+        rivet(canvas, u, u)
+        rivet(canvas, w - 3 * u, u)
+        rivet(canvas, u, h - 3 * u)
+        rivet(canvas, w - 3 * u, h - 3 * u)
+    }
+
+    private fun rivet(canvas: Canvas, left: Int, top: Int) {
+        fill(canvas, left, top, left + 2 * unit, top + 2 * unit, goldLight)
+        fill(canvas, left + unit, top + unit, left + 2 * unit, top + 2 * unit, goldDark)
+    }
+
+    private fun fill(canvas: Canvas, l: Int, t: Int, r: Int, b: Int, color: Int) {
+        paint.color = color
+        canvas.drawRect(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat(), paint)
     }
 
     companion object {
