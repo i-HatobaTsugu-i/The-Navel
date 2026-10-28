@@ -25,8 +25,8 @@ class MainActivity : Activity() {
             return
         }
 
-        hideSystemBars()
         setContentView(buildMenu())
+        hideSystemBars()
     }
 
     private fun buildMenu(): View {

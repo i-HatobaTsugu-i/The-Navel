@@ -9,16 +9,13 @@ import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.TextView
 import kotlin.math.ceil
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 /**
- * 铁板按钮：金色细边框 + 45° 斜纹内板 + 四角螺丝。
- * 内板按"中心鼓起、四周压暗"的径向明暗叠左上镜面高光，量化成少量级差以保持像素风。
- * 整块底色在尺寸变化时渲染进 Bitmap 缓存，onDraw 只贴图。
- * 一格 = 1dp，所有边缘都落在整数像素上。
+ * 铁板按钮：黄铜细边框 + 45° 拉丝斜纹内板 + 四角螺丝。
+ * 斜纹交界留 2 格过渡、叠一层确定性噪点，避免平涂感；整体只做上亮下暗的方向光，不打球面高光。
+ * 整块底色渲染进 Bitmap 缓存，onDraw 只贴图。一格 = 1dp。
  */
 class PixelButton @JvmOverloads constructor(
     context: Context,
@@ -92,7 +89,7 @@ class PixelButton @JvmOverloads constructor(
         return bmp
     }
 
-    // 金框：最外沿上/左亮、下/右暗，内圈用基色，读起来是一圈有厚度的金属条
+    // 框：最外沿上/左亮、下/右暗，内圈基色，读起来是一条有厚度的黄铜条
     private fun frameColor(i: Int, j: Int, cols: Int, rows: Int): Int = when {
         i == 0 || j == 0 -> GOLD_LIGHT
         i == cols - 1 || j == rows - 1 -> GOLD_DARK
@@ -104,33 +101,49 @@ class PixelButton @JvmOverloads constructor(
         val cj = j - BORDER
         val pc = cols - 2 * BORDER
         val pr = rows - 2 * BORDER
-        val base = if ((ci + cj) / STRIPE % 2 == 0) PLATE_LIGHT else PLATE_DARK
 
-        val nx = (ci - (pc - 1) / 2.0) / max(pc / 2.0, 1.0)
-        val ny = (cj - (pr - 1) / 2.0) / max(pr / 2.0, 1.0)
-        val dist = min(1.0, sqrt(nx * nx + ny * ny) / sqrt(2.0))
+        // 斜纹：交界处用 2 格过渡，避免硬边平涂
+        val band = (ci + cj) % (2 * STRIPE)
+        val lightBand = band < STRIPE
+        val edgeDist = if (lightBand) min(band, STRIPE - band)
+        else min(band - STRIPE, 2 * STRIPE - band)
+        val mix = min(1.0, edgeDist / 2.0).toFloat()
+        val base = if (lightBand) blend(PLATE_DARK, PLATE_LIGHT, mix)
+        else blend(PLATE_LIGHT, PLATE_DARK, mix)
 
-        var factor = (1.16 - 0.30 * dist - 0.07 * ny).toFloat()
-        // 左上方的镜面反射区
-        val sx = nx + 0.55
-        val sy = ny + 0.55
-        if (sx * sx + sy * sy < 0.30) factor += 0.09f
+        // 方向光：整体上亮下暗，左侧略亮；不加球面高光
+        val ny = cj.toFloat() / maxOf(pr - 1, 1)
+        val nx = ci.toFloat() / maxOf(pc - 1, 1)
+        var factor = 1.06f - 0.14f * ny - 0.02f * nx + noise(ci, cj)
         // 贴框内阴影：左上重、右下轻
-        if (ci == 0 || cj == 0) factor -= 0.14f
-        if (ci == pc - 1 || cj == pr - 1) factor -= 0.06f
+        if (ci == 0 || cj == 0) factor -= 0.10f
+        if (ci == pc - 1 || cj == pr - 1) factor -= 0.04f
 
         return shade(base, quantize(factor))
     }
 
-    // 阶梯量化：像素风光靠少数几级明暗读出体积，平滑渐变反而糊
-    private fun quantize(f: Float): Float = (f * 16f).roundToInt() / 16f
-
-    private fun shade(rgb: Int, factor: Float): Int {
-        val r = (Color.red(rgb) * factor).roundToInt().coerceIn(0, 255)
-        val g = (Color.green(rgb) * factor).roundToInt().coerceIn(0, 255)
-        val b = (Color.blue(rgb) * factor).roundToInt().coerceIn(0, 255)
-        return Color.rgb(r, g, b)
+    // 确定性噪点，打破大面积同色，读起来像金属表面的细微不匀
+    private fun noise(i: Int, j: Int): Float {
+        val v = (i * 73856093) xor (j * 19349663)
+        val m = ((v % 7) + 7) % 7
+        return (m - 3) * 0.006f
     }
+
+    private fun quantize(f: Float): Float = (f * 64f).roundToInt() / 64f
+
+    private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
+        lerp(Color.red(from), Color.red(to), t),
+        lerp(Color.green(from), Color.green(to), t),
+        lerp(Color.blue(from), Color.blue(to), t)
+    )
+
+    private fun lerp(a: Int, b: Int, t: Float): Int = (a + (b - a) * t).roundToInt().coerceIn(0, 255)
+
+    private fun shade(rgb: Int, factor: Float): Int = Color.rgb(
+        (Color.red(rgb) * factor).roundToInt().coerceIn(0, 255),
+        (Color.green(rgb) * factor).roundToInt().coerceIn(0, 255),
+        (Color.blue(rgb) * factor).roundToInt().coerceIn(0, 255)
+    )
 
     private fun drawRivets(c: Canvas, cols: Int, rows: Int) {
         val margin = BORDER + 4
@@ -163,30 +176,28 @@ class PixelButton @JvmOverloads constructor(
         private const val MIN_ROWS = 64
         private const val BORDER = 4
         private const val STRIPE = 8
-        private const val RIVET = 8
+        private const val RIVET = 6
         private const val PRESS_OVERLAY = 0x33000000
 
-        private val GOLD_LIGHT = Color.parseColor("#F2CD78")
-        private val GOLD = Color.parseColor("#D9A441")
-        private val GOLD_DARK = Color.parseColor("#8C6420")
-        private val PLATE_LIGHT = Color.parseColor("#9AA1AC")
-        private val PLATE_DARK = Color.parseColor("#7C828E")
+        private val GOLD_LIGHT = Color.parseColor("#C8A96B")
+        private val GOLD = Color.parseColor("#B08A45")
+        private val GOLD_DARK = Color.parseColor("#6F5528")
+        private val PLATE_LIGHT = Color.parseColor("#8F959D")
+        private val PLATE_DARK = Color.parseColor("#80868E")
 
-        private val RING = Color.parseColor("#4A4F58")
-        private val HI = Color.parseColor("#D6DAE0")
-        private val MID = Color.parseColor("#9AA0A9")
-        private val DARK = Color.parseColor("#6F757E")
+        private val RING = Color.parseColor("#4C5158")
+        private val HI = Color.parseColor("#A9AFB7")
+        private val MID = Color.parseColor("#868C94")
+        private val DARK = Color.parseColor("#666C74")
 
-        // 8×8 格圆头螺丝：左上高光、右下压暗
+        // 6×6 格螺丝：左上高光、右下压暗
         private val RIVET_PATTERN = arrayOf(
-            intArrayOf(0, 0, RING, RING, RING, RING, 0, 0),
-            intArrayOf(0, RING, HI, HI, HI, MID, RING, 0),
-            intArrayOf(RING, HI, HI, HI, MID, MID, MID, RING),
-            intArrayOf(RING, HI, HI, MID, MID, MID, DARK, RING),
-            intArrayOf(RING, HI, MID, MID, MID, DARK, DARK, RING),
-            intArrayOf(RING, MID, MID, MID, DARK, DARK, DARK, RING),
-            intArrayOf(0, RING, MID, DARK, DARK, DARK, RING, 0),
-            intArrayOf(0, 0, RING, RING, RING, RING, 0, 0)
+            intArrayOf(0, RING, RING, RING, RING, 0),
+            intArrayOf(RING, HI, HI, MID, MID, RING),
+            intArrayOf(RING, HI, MID, MID, DARK, RING),
+            intArrayOf(RING, HI, MID, MID, DARK, RING),
+            intArrayOf(RING, MID, MID, DARK, DARK, RING),
+            intArrayOf(0, RING, RING, RING, RING, 0)
         )
     }
 }
