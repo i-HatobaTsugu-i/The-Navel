@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +23,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
 import kotlin.math.min
 
 class MainActivity : Activity() {
@@ -33,6 +35,7 @@ class MainActivity : Activity() {
     private var screen = Screen.MENU
     private var layersBox: LinearLayout? = null
     private var shipPreview: ShipPreviewView? = null
+    private var pendingLayer = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,15 +158,13 @@ class MainActivity : Activity() {
 
     // ---------- 纸张页面通用外壳：纸张随内容变长，整张纸一起滚动 ----------
 
-    private fun showPaperPage(panel: View, widthPx: Int, onScrimTap: (() -> Unit)?) {
+    private fun showPaperPage(panel: View, widthPx: Int) {
         val dp = resources.displayMetrics.density
         val root = FrameLayout(this)
         root.addView(OceanView(this), FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(View(this).apply {
-            setBackgroundColor(SCRIM)
-            if (onScrimTap != null) setOnClickListener { onScrimTap() }
-        }, FrameLayout.LayoutParams(
+        // 二级页不再支持点空白退出（只能按返回键或页内按钮）
+        root.addView(View(this).apply { setBackgroundColor(SCRIM) }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
         val host = FrameLayout(this)
@@ -223,7 +224,7 @@ class MainActivity : Activity() {
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
-        showPaperPage(panel, panelWidth) { showMenu() }
+        showPaperPage(panel, panelWidth)
     }
 
     // ---------- 鸣谢 ----------
@@ -250,7 +251,7 @@ class MainActivity : Activity() {
         }
         panel.addView(text, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        showPaperPage(panel, panelWidth) { showMenu() }
+        showPaperPage(panel, panelWidth)
     }
 
     // ---------- 编辑器菜单 ----------
@@ -279,7 +280,7 @@ class MainActivity : Activity() {
         }
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        showPaperPage(panel, panelWidth) { showMenu() }
+        showPaperPage(panel, panelWidth)
     }
 
     // ---------- 船只编辑器 ----------
@@ -303,14 +304,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val newShip = menuButton("新建船只").apply { setOnClickListener { confirmNewShip() } }
-        val load = menuButton("载入船只").apply { setOnClickListener { showLoadShips() } }
+        val newShip = iconButton(NEW_PATTERN, ICON_PARCHMENT) { confirmNewShip() }
+        val load = iconButton(LOAD_PATTERN, ICON_GOLD) { showLoadShips() }
         val back = menuButton("返回").apply { setOnClickListener { showEditor() } }
         topBar.addView(newShip, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         topBar.addView(load, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = (8 * dp).toInt()
+            marginStart = (10 * dp).toInt()
         })
         topBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         topBar.addView(back, LinearLayout.LayoutParams(
@@ -382,7 +383,7 @@ class MainActivity : Activity() {
         panel.addView(outer, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
-        showPaperPage(panel, panelWidth, null)
+        showPaperPage(panel, panelWidth)
         refreshLayers()
     }
 
@@ -564,28 +565,37 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(if (child) (24 * dp).toInt() else 0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+        }
+        if (child) {
+            row.addView(BranchView(this), LinearLayout.LayoutParams(
+                (16 * dp).toInt(), (28 * dp).toInt()))
         }
         val name = TextView(this).apply {
             text = "${index + 1}."
-            textSize = if (child) 12f else 16f
+            textSize = 16f
             typeface = pixelFont
             includeFontPadding = false
             setTextColor(Color.parseColor("#2B2B2B"))
         }
-        val nameField = editField(layer.name, "图层名") { layer.name = it }.apply {
-            textSize = if (child) 12f else 16f
-        }
-        val typeButton = smallButton(layer.type.label, child).apply {
+        val nameField = editField(layer.name, "图层名") { layer.name = it }
+        val typeButton = smallButton(layer.type.label, false).apply {
             setOnClickListener {
                 layer.type = layer.type.next()
                 refreshLayers()
             }
         }
-        val bindButton = smallButton(bindLabel(layer), child).apply {
+        val bindButton = smallButton(bindLabel(layer), false).apply {
             setOnClickListener { showBindMenu(layer, index) }
         }
-        val trash = TrashView(this).apply {
+        val import = PixelIconView(this).apply {
+            pattern = IMAGE_PATTERN
+            palette = mapOf('X' to ICON_STEEL)
+            onTap = { pickImage(index) }
+        }
+        val trash = PixelIconView(this).apply {
+            pattern = TRASH_PATTERN
+            palette = TRASH_PALETTE
             onTap = {
                 ShipStore.draft.layers.removeAt(index)
                 refreshLayers()
@@ -604,11 +614,44 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             marginStart = (6 * dp).toInt()
         })
+        row.addView(import, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = (6 * dp).toInt()
+        })
         row.addView(trash, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = (8 * dp).toInt()
+            marginStart = (6 * dp).toInt()
         })
-        return row
+        return underlined(row)
+    }
+
+    private fun pickImage(index: Int) {
+        pendingLayer = index
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        startActivityForResult(intent, REQUEST_LAYER_IMAGE)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_LAYER_IMAGE || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val index = pendingLayer
+        if (index !in ShipStore.draft.layers.indices) return
+        val dir = File(filesDir, "layers").apply { mkdirs() }
+        val target = File(dir, "layer_${System.currentTimeMillis()}.png")
+        runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+        }.onSuccess {
+            ShipStore.draft.layers[index].imagePath = target.absolutePath
+            refreshLayers()
+        }.onFailure {
+            Toast.makeText(this, "导入图片失败", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun bindLabel(layer: ShipLayer): String =
@@ -684,7 +727,7 @@ class MainActivity : Activity() {
 
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        showPaperPage(panel, panelWidth) { showShipEditor() }
+        showPaperPage(panel, panelWidth)
     }
 
     private fun shipEntry(ship: Ship, dp: Float): View {
@@ -725,7 +768,9 @@ class MainActivity : Activity() {
             marginStart = (10 * dp).toInt()
         })
 
-        val trash = TrashView(this).apply {
+        val trash = PixelIconView(this).apply {
+            pattern = TRASH_PATTERN
+            palette = TRASH_PALETTE
             onTap = {
                 ShipStore.delete(ship)
                 showLoadShips()
@@ -739,6 +784,13 @@ class MainActivity : Activity() {
     // ---------- 按钮与工具 ----------
 
     private fun menuButton(label: String): PixelButton = smallButton(label, false)
+
+    private fun iconButton(pattern: Array<String>, color: Int, tap: () -> Unit): PixelIconView =
+        PixelIconView(this).apply {
+            this.pattern = pattern
+            palette = mapOf('X' to color)
+            onTap = tap
+        }
 
     private fun smallButton(label: String, small: Boolean): PixelButton = PixelButton(this).apply {
         text = label
@@ -796,6 +848,58 @@ class MainActivity : Activity() {
 
     companion object {
         private const val SCRIM = 0x59000000
+        private const val REQUEST_LAYER_IMAGE = 1001
         private val RULE_COLOR = Color.parseColor("#9DB7D8")
+        private val ICON_PARCHMENT = Color.parseColor("#E8E4D8")
+        private val ICON_GOLD = Color.parseColor("#D9A441")
+        private val ICON_STEEL = Color.parseColor("#5B6770")
+        private val TRASH_PALETTE = mapOf(
+            'X' to Color.parseColor("#C0392B"),
+            'Y' to Color.parseColor("#7B241C")
+        )
+
+        private val NEW_PATTERN = arrayOf(
+            " XXXXXXXX ",
+            " X      X ",
+            " X  XX  X ",
+            " X XXXX X ",
+            " X  XX  X ",
+            " X      X ",
+            " X      X ",
+            " XXXXXXXX "
+        )
+
+        private val LOAD_PATTERN = arrayOf(
+            " XXXX      ",
+            "XXXXXXXX   ",
+            "X        X ",
+            "X        X ",
+            "XXXXXXXXXX "
+        )
+
+        private val IMAGE_PATTERN = arrayOf(
+            "XXXXXXXX",
+            "X      X",
+            "X  XX  X",
+            "X XXXX X",
+            "X  XX  X",
+            "X      X",
+            "XXXXXXXX"
+        )
+
+        private val TRASH_PATTERN = arrayOf(
+            "   XXXX   ",
+            "  XXXXXX  ",
+            " YYYYYYYY ",
+            "  XXXXXX  ",
+            "  X XX XX ",
+            "  X XX XX ",
+            "  X XX XX ",
+            "  X XX XX ",
+            "  X XX XX ",
+            "  X XX XX ",
+            "  XXXXXX  ",
+            "   YYYY   "
+        )
     }
 }

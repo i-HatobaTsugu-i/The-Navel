@@ -1,16 +1,17 @@
 package io.github.ihatobatsugui.thenavel
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
 
 /**
- * 船只俯视示意图：船体画成船壳轮廓，炮塔按数量排在船体中线，装饰物落在两侧。
- * 目前图层没有坐标信息，所以只是按图层类型和数量做的示意排布。
+ * 船只俯视图：按图层顺序叠加导入的图片（等比缩放、居中）。
+ * 图层还没导入图片时，退回按图层类型画的示意图。
  */
 class ShipPreviewView @JvmOverloads constructor(
     context: Context,
@@ -23,6 +24,9 @@ class ShipPreviewView @JvmOverloads constructor(
             invalidate()
         }
 
+    private val bitmapPaint = Paint().apply { isFilterBitmap = false }
+    private val cache = HashMap<String, Bitmap?>()
+
     private val hullFill = Paint().apply {
         isAntiAlias = false
         style = Paint.Style.FILL
@@ -34,14 +38,6 @@ class ShipPreviewView @JvmOverloads constructor(
         strokeWidth = resources.displayMetrics.density * 2f
         color = Color.parseColor("#C9D2DA")
     }
-    private val turretPaint = Paint().apply {
-        isAntiAlias = false
-        color = Color.parseColor("#9AA1AA")
-    }
-    private val decorPaint = Paint().apply {
-        isAntiAlias = false
-        color = Color.parseColor("#B08A45")
-    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -49,7 +45,25 @@ class ShipPreviewView @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        val path = Path()
+        val images = layers.filter { it.imagePath.isNotBlank() }
+        if (images.isNotEmpty()) {
+            images.forEach { layer ->
+                val bitmap = cache.getOrPut(layer.imagePath) {
+                    runCatching { BitmapFactory.decodeFile(layer.imagePath) }.getOrNull()
+                } ?: return@forEach
+                val scale = minOf(w * 0.9f / bitmap.width, h * 0.9f / bitmap.height)
+                val dw = bitmap.width * scale
+                val dh = bitmap.height * scale
+                val left = (w - dw) / 2f
+                val top = (h - dh) / 2f
+                canvas.drawBitmap(bitmap, null,
+                    android.graphics.RectF(left, top, left + dw, top + dh), bitmapPaint)
+            }
+            return
+        }
+
+        // 无图片时：示意图
+        val path = android.graphics.Path()
         path.moveTo(w * 0.05f, h * 0.5f)
         path.lineTo(w * 0.30f, h * 0.16f)
         path.lineTo(w * 0.75f, h * 0.16f)
@@ -59,30 +73,5 @@ class ShipPreviewView @JvmOverloads constructor(
         path.close()
         canvas.drawPath(path, hullFill)
         canvas.drawPath(path, hullStroke)
-
-        val turrets = layers.count { it.type == LayerType.TURRET }
-        val size = minOf(h * 0.16f, w * 0.06f)
-        for (k in 0 until turrets) {
-            val t = if (turrets == 1) 0.5f else 0.62f - k * (0.30f / (turrets - 1))
-            canvas.drawRect(w * t - size / 2, h * 0.5f - size / 2,
-                w * t + size / 2, h * 0.5f + size / 2, turretPaint)
-        }
-
-        val decors = layers.count { it.type == LayerType.DECOR }
-        for (k in 0 until decors) {
-            val side = if (k % 2 == 0) 0.30f else 0.70f
-            val x = w * side
-            val y = h * (0.36f + 0.16f * (k / 2))
-            canvas.drawRect(x - size / 2, y - size / 2, x + size / 2, y + size / 2, decorPaint)
-        }
-
-        if (layers.none { it.type == LayerType.HULL }) {
-            // 没有船体图层时给个提示性的虚线框（用四条短线代替）
-            val dash = Paint().apply {
-                isAntiAlias = false
-                color = Color.parseColor("#7F8A94")
-            }
-            canvas.drawRect(w * 0.05f, h * 0.45f, w * 0.10f, h * 0.55f, dash)
-        }
     }
 }
