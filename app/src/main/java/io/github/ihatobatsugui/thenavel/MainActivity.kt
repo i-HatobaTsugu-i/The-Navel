@@ -154,7 +154,11 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((8 * dp).toInt(), 0, 0, 0)
         }
-        val scroll = ScrollView(this).apply { addView(body) }
+        val scroll = ScrollView(this).apply {
+            // 内容不足一屏时也把 Textview 拉满，否则横线只画得出一行
+            isFillViewport = true
+            addView(body)
+        }
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
