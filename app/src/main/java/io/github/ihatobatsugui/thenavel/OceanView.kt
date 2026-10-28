@@ -31,6 +31,8 @@ class OceanView @JvmOverloads constructor(
 
     private var bitmap: Bitmap? = null
     private var pixels = IntArray(0)
+    private var foam = FloatArray(0)
+    private var frameIndex = 0
     private var cols = 0
     private var rows = 0
     private var startAt = 0L
@@ -42,6 +44,8 @@ class OceanView @JvmOverloads constructor(
         bitmap?.recycle()
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
+        foam = FloatArray(cols * rows)
+        frameIndex = 0
         startAt = SystemClock.uptimeMillis()
         lastFrameAt = 0L
     }
@@ -62,6 +66,8 @@ class OceanView @JvmOverloads constructor(
 
     private fun render(t: Float) {
         val stamp = (t * 5).toInt()
+        val drift = frameIndex % 2 == 0
+        frameIndex++
         var index = 0
         for (j in 0 until rows) {
             val depth = j.toFloat() / max(rows - 1, 1)
@@ -77,12 +83,17 @@ class OceanView @JvmOverloads constructor(
 
                 val mask = smoothStep(0.48f, 0.68f, patch)
                 val f = 0.55f * patch + 0.45f * tex
-                val density = max(0f, (f - 0.54f) / 0.20f) * mask
+                val source = max(0f, (f - 0.54f) / 0.20f) * mask
+
+                // 泡沫有生命周期：先按漂移取上一帧的值、衰减，再叠加新生的泡沫
+                val prevIndex = if (drift) j * cols + (i + 1) % cols else index
+                val value = (foam[prevIndex] * DECAY + source * 0.25f).coerceIn(0f, 1f)
+                foam[index] = value
 
                 val r = hash01(i, j, stamp)
                 pixels[index++] = when {
-                    r < density * 0.42f -> FOAM
-                    r < density * 0.80f -> blend(water, FOAM_DIM, 0.6f)
+                    r < value * 0.70f -> FOAM
+                    r < value * 1.20f -> blend(water, FOAM_DIM, 0.65f)
                     else -> water
                 }
             }
@@ -155,6 +166,7 @@ class OceanView @JvmOverloads constructor(
     companion object {
         private const val FRAME_MS = 125L
         private const val OCTAVES = 2
+        private const val DECAY = 0.85f
         private val DEEP = Color.parseColor("#081A29")
         private val SHALLOW = Color.parseColor("#17435C")
         private val FOAM = Color.parseColor("#D2E2EA")

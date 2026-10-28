@@ -40,12 +40,12 @@ class MainActivity : Activity() {
             text = "The Navel"
             textSize = 48f
             typeface = pixelFont
-            letterSpacing = 0.12f
+            letterSpacing = 0.18f
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#F2EAD3"))
-            extrusionColor = Color.parseColor("#5A4527")
-            outlineColor = Color.parseColor("#241C10")
-            depth = 3
+            extrusionNear = Color.parseColor("#7A6238")
+            extrusionFar = Color.parseColor("#2A2114")
+            depth = 4
             setPadding(0, (24 * dp).toInt(), 0, 0)
         }
         root.addView(title, LinearLayout.LayoutParams(
@@ -134,9 +134,11 @@ class MainActivity : Activity() {
         val dp = resources.displayMetrics.density
         val log = CrashReport.read(this) ?: "暂无错误记录"
 
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#10141A"))
-        }
+        val root = FrameLayout(this)
+        root.addView(OceanView(this), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(View(this).apply { setBackgroundColor(SCRIM) }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
             (520 * dp).toInt()
@@ -198,9 +200,11 @@ class MainActivity : Activity() {
 
     private fun showCredits() {
         val dp = resources.displayMetrics.density
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#10141A"))
-        }
+        val root = FrameLayout(this)
+        root.addView(OceanView(this), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(View(this).apply { setBackgroundColor(SCRIM) }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
             (420 * dp).toInt()
@@ -285,5 +289,9 @@ class MainActivity : Activity() {
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 )
         }
+    }
+
+    companion object {
+        private const val SCRIM = 0x59000000
     }
 }
