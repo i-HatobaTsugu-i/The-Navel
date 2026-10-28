@@ -28,7 +28,7 @@ class MainActivity : Activity() {
             val button = PixelButton(this).apply {
                 text = label
                 textSize = 20f
-                setTextColor(Color.WHITE)
+                setTextColor(Color.parseColor("#16191F"))
                 val padH = (16 * dp).toInt()
                 val padV = (12 * dp).toInt()
                 setPadding(padH, padV, padH, padV)

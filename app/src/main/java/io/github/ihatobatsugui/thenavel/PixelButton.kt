@@ -1,18 +1,23 @@
 package io.github.ihatobatsugui.thenavel
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.view.Gravity
 import android.widget.TextView
 import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
- * 铁材质空心线框按钮：3 格铁框斜面 + 1 格金线 + 同灰色内板（顶/左高光、底/右阴影做凸起）。
- * 全部用整数矩形填充：描边会落在半像素上并触发抗锯齿，1 格粗的线会变 3px 或发灰。
- * 单位为 2dp 一格，所有边缘都落在格线上。
+ * 铁板按钮：金色细边框 + 45° 斜纹内板 + 四角螺丝。
+ * 内板按"中心鼓起、四周压暗"的径向明暗叠左上镜面高光，量化成少量级差以保持像素风。
+ * 整块底色在尺寸变化时渲染进 Bitmap 缓存，onDraw 只贴图。
  */
 class PixelButton @JvmOverloads constructor(
     context: Context,
@@ -20,22 +25,24 @@ class PixelButton @JvmOverloads constructor(
 ) : TextView(context, attrs) {
 
     private val unit = (resources.displayMetrics.density * GRID_DP).roundToInt().coerceAtLeast(1)
-
     private val paint = Paint().apply {
         isAntiAlias = false
         style = Paint.Style.FILL
     }
-
-    var ironLight: Int = Color.parseColor("#9AA1AC")
-    var ironMid: Int = Color.parseColor("#6E7480")
-    var ironDark: Int = Color.parseColor("#454A54")
-    var gold: Int = Color.parseColor("#D9A441")
+    private val bitmapPaint = Paint().apply { isFilterBitmap = false }
+    private var cache: Bitmap? = null
 
     init {
         isClickable = true
         isFocusable = true
+        gravity = Gravity.CENTER
         setWillNotDraw(false)
         minimumHeight = MIN_ROWS * unit
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        cache?.recycle()
+        cache = null
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -52,57 +59,125 @@ class PixelButton @JvmOverloads constructor(
         else ceil(value.toFloat() / unit).toInt() * unit
 
     override fun onDraw(canvas: Canvas) {
+        val bg = cache ?: renderBackground().also { cache = it }
+        canvas.drawBitmap(bg, 0f, 0f, bitmapPaint)
+        if (isPressed) {
+            paint.color = PRESS_OVERLAY
+            val inset = (BORDER + 1) * unit
+            canvas.drawRect(inset.toFloat(), inset.toFloat(),
+                (width - inset).toFloat(), (height - inset).toFloat(), paint)
+        }
         super.onDraw(canvas)
+    }
+
+    private fun renderBackground(): Bitmap {
         val u = unit
-        val w = width
-        val h = height
+        val cols = width / u
+        val rows = height / u
+        val bmp = Bitmap.createBitmap(cols * u, rows * u, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
 
-        // 铁外框 3 格：上/左外缘亮、下/右外缘暗，模拟左上打光
-        fill(canvas, 0, 0, w, u, ironLight)
-        fill(canvas, 0, u, w, 2 * u, ironMid)
-        fill(canvas, 0, 2 * u, w, 3 * u, ironDark)
-        fill(canvas, 0, h - u, w, h, ironDark)
-        fill(canvas, 0, h - 2 * u, w, h - u, ironMid)
-        fill(canvas, 0, h - 3 * u, w, h - 2 * u, ironLight)
-        fill(canvas, 0, 3 * u, u, h - 3 * u, ironLight)
-        fill(canvas, u, 3 * u, 2 * u, h - 3 * u, ironMid)
-        fill(canvas, 2 * u, 3 * u, 3 * u, h - 3 * u, ironDark)
-        fill(canvas, w - u, 3 * u, w, h - 3 * u, ironDark)
-        fill(canvas, w - 2 * u, 3 * u, w - u, h - 3 * u, ironMid)
-        fill(canvas, w - 3 * u, 3 * u, w - 2 * u, h - 3 * u, ironLight)
-
-        // 金线 1 格
-        fill(canvas, 3 * u, 3 * u, w - 3 * u, 4 * u, gold)
-        fill(canvas, 3 * u, h - 4 * u, w - 3 * u, h - 3 * u, gold)
-        fill(canvas, 3 * u, 4 * u, 4 * u, h - 4 * u, gold)
-        fill(canvas, w - 4 * u, 4 * u, w - 3 * u, h - 4 * u, gold)
-
-        // 内板：同铁灰，顶/左 1 格高光、底/右 1 格阴影，做出中心凸起
-        fill(canvas, 4 * u, 4 * u, w - 4 * u, h - 4 * u, ironMid)
-        fill(canvas, 4 * u, 4 * u, w - 4 * u, 5 * u, ironLight)
-        fill(canvas, 4 * u, 5 * u, 5 * u, h - 5 * u, ironLight)
-        fill(canvas, 4 * u, h - 5 * u, w - 4 * u, h - 4 * u, ironDark)
-        fill(canvas, w - 5 * u, 5 * u, w - 4 * u, h - 5 * u, ironDark)
-
-        // 四角铆钉：2×2 格，右下 1 格压暗
-        rivet(canvas, u, u)
-        rivet(canvas, w - 3 * u, u)
-        rivet(canvas, u, h - 3 * u)
-        rivet(canvas, w - 3 * u, h - 3 * u)
+        for (j in 0 until rows) {
+            for (i in 0 until cols) {
+                val edge = i < BORDER || j < BORDER || i >= cols - BORDER || j >= rows - BORDER
+                val color = if (edge) frameColor(i, j, cols, rows) else plateColor(i, j, cols, rows)
+                fill(c, i * u, j * u, (i + 1) * u, (j + 1) * u, color)
+            }
+        }
+        drawRivets(c, cols, rows)
+        return bmp
     }
 
-    private fun rivet(canvas: Canvas, left: Int, top: Int) {
-        fill(canvas, left, top, left + 2 * unit, top + 2 * unit, ironLight)
-        fill(canvas, left + unit, top + unit, left + 2 * unit, top + 2 * unit, ironDark)
+    // 金框：最外沿上/左亮、下/右暗，内圈用基色，读起来是一圈有厚度的金属条
+    private fun frameColor(i: Int, j: Int, cols: Int, rows: Int): Int = when {
+        i == 0 || j == 0 -> GOLD_LIGHT
+        i == cols - 1 || j == rows - 1 -> GOLD_DARK
+        else -> GOLD
     }
 
-    private fun fill(canvas: Canvas, l: Int, t: Int, r: Int, b: Int, color: Int) {
+    private fun plateColor(i: Int, j: Int, cols: Int, rows: Int): Int {
+        val ci = i - BORDER
+        val cj = j - BORDER
+        val pc = cols - 2 * BORDER
+        val pr = rows - 2 * BORDER
+        val base = if ((ci + cj) / STRIPE % 2 == 0) PLATE_LIGHT else PLATE_DARK
+
+        val nx = (ci - (pc - 1) / 2.0) / max(pc / 2.0, 1.0)
+        val ny = (cj - (pr - 1) / 2.0) / max(pr / 2.0, 1.0)
+        val dist = min(1.0, sqrt(nx * nx + ny * ny) / sqrt(2.0))
+
+        var factor = (1.16 - 0.30 * dist - 0.07 * ny).toFloat()
+        // 左上方的镜面反射区
+        val sx = nx + 0.55
+        val sy = ny + 0.55
+        if (sx * sx + sy * sy < 0.30) factor += 0.09f
+        // 贴框内阴影：左上重、右下轻
+        if (ci == 0 || cj == 0) factor -= 0.14f
+        if (ci == pc - 1 || cj == pr - 1) factor -= 0.06f
+
+        return shade(base, quantize(factor))
+    }
+
+    // 阶梯量化：像素风光靠少数几级明暗读出体积，平滑渐变反而糊
+    private fun quantize(f: Float): Float = (f * 16f).roundToInt() / 16f
+
+    private fun shade(rgb: Int, factor: Float): Int {
+        val r = (Color.red(rgb) * factor).roundToInt().coerceIn(0, 255)
+        val g = (Color.green(rgb) * factor).roundToInt().coerceIn(0, 255)
+        val b = (Color.blue(rgb) * factor).roundToInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
+    }
+
+    private fun drawRivets(c: Canvas, cols: Int, rows: Int) {
+        val offsets = listOf(
+            BORDER + 2 to BORDER + 2,
+            cols - BORDER - 2 - RIVET to BORDER + 2,
+            BORDER + 2 to rows - BORDER - 2 - RIVET,
+            cols - BORDER - 2 - RIVET to rows - BORDER - 2 - RIVET
+        )
+        for ((ox, oy) in offsets) {
+            for (y in 0 until RIVET) {
+                for (x in 0 until RIVET) {
+                    val color = RIVET_PATTERN[y][x]
+                    if (color != Color.TRANSPARENT) {
+                        fill(c, (ox + x) * unit, (oy + y) * unit,
+                            (ox + x + 1) * unit, (oy + y + 1) * unit, color)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun fill(c: Canvas, l: Int, t: Int, r: Int, b: Int, color: Int) {
         paint.color = color
-        canvas.drawRect(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat(), paint)
+        c.drawRect(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat(), paint)
     }
 
     companion object {
         private const val GRID_DP = 2f
         private const val MIN_ROWS = 32
+        private const val BORDER = 2
+        private const val STRIPE = 4
+        private const val RIVET = 4
+        private const val PRESS_OVERLAY = 0x33000000
+
+        private val GOLD_LIGHT = Color.parseColor("#F2CD78")
+        private val GOLD = Color.parseColor("#D9A441")
+        private val GOLD_DARK = Color.parseColor("#8C6420")
+        private val PLATE_LIGHT = Color.parseColor("#9AA1AC")
+        private val PLATE_DARK = Color.parseColor("#7C828E")
+
+        private val RIVET_RING = Color.parseColor("#4A4F58")
+        private val RIVET_HI = Color.parseColor("#D6DAE0")
+        private val RIVET_MID = Color.parseColor("#9AA0A9")
+        private val RIVET_DARK = Color.parseColor("#6F757E")
+
+        // 4×4 格的圆头螺丝：左上高光、右下压暗
+        private val RIVET_PATTERN = arrayOf(
+            intArrayOf(Color.TRANSPARENT, RIVET_RING, RIVET_RING, Color.TRANSPARENT),
+            intArrayOf(RIVET_RING, RIVET_HI, RIVET_MID, RIVET_RING),
+            intArrayOf(RIVET_RING, RIVET_MID, RIVET_DARK, RIVET_RING),
+            intArrayOf(Color.TRANSPARENT, RIVET_RING, RIVET_RING, Color.TRANSPARENT)
+        )
     }
 }
