@@ -11,7 +11,6 @@ import android.util.AttributeSet
 import android.view.View
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -77,8 +76,7 @@ class OceanView @JvmOverloads constructor(
 
         var index = 0
         for (j in 0 until rows) {
-            val depth = j.toFloat() / max(rows - 1, 1)
-            val water = lerpColor(SHALLOW, DEEP, depth.pow(0.8f))
+            val water = WATER
             val gy = j.toFloat() / GRID_STEP
             val gy0 = gy.toInt()
             val fy = gy - gy0
@@ -187,12 +185,6 @@ class OceanView @JvmOverloads constructor(
         (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t).roundToInt().coerceIn(0, 255)
     )
 
-    private fun lerpColor(a: Int, b: Int, t: Float): Int = Color.rgb(
-        (Color.red(a) + (Color.red(b) - Color.red(a)) * t).roundToInt().coerceIn(0, 255),
-        (Color.green(a) + (Color.green(b) - Color.green(a)) * t).roundToInt().coerceIn(0, 255),
-        (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).roundToInt().coerceIn(0, 255)
-    )
-
     companion object {
         private const val FRAME_MS = 16L
         private const val GRID_STEP = 2
@@ -200,8 +192,7 @@ class OceanView @JvmOverloads constructor(
         // 60fps 下按 ~0.55s 的时间常数换算出的每帧衰减
         private const val DECAY = 0.97f
         private const val SEED_RATE = 0.004f
-        private val SHALLOW = Color.parseColor("#2F7396")
-        private val DEEP = Color.parseColor("#0F2C40")
+        private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
     }

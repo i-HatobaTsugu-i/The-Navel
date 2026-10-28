@@ -90,6 +90,7 @@ class MainActivity : Activity() {
                 when (label) {
                     "退出" -> button.setOnClickListener { finishAffinity() }
                     "鸣谢" -> button.setOnClickListener { showCredits() }
+                    "编辑器" -> button.setOnClickListener { showEditor() }
                 }
                 rowLayout.addView(button, LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -152,7 +153,10 @@ class MainActivity : Activity() {
         val root = FrameLayout(this)
         root.addView(OceanView(this), FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(View(this).apply { setBackgroundColor(SCRIM) }, FrameLayout.LayoutParams(
+        root.addView(View(this).apply {
+            setBackgroundColor(SCRIM)
+            setOnClickListener { showMenu() }
+        }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
@@ -167,6 +171,7 @@ class MainActivity : Activity() {
             val padH = (20 * dp).toInt()
             val padV = (18 * dp).toInt()
             setPadding(padH, padV, padH, padV)
+            isClickable = true
         }
 
         val body = PaperTextView(this).apply {
@@ -188,11 +193,8 @@ class MainActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, 0)
         }
         val copy = menuButton("复制日志").apply { setOnClickListener { copyLog(log) } }
-        val back = menuButton("返回").apply { setOnClickListener { showMenu() } }
-        bar.addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(back, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = (8 * dp).toInt()
-        })
+        bar.addView(copy, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -218,7 +220,10 @@ class MainActivity : Activity() {
         val root = FrameLayout(this)
         root.addView(OceanView(this), FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(View(this).apply { setBackgroundColor(SCRIM) }, FrameLayout.LayoutParams(
+        root.addView(View(this).apply {
+            setBackgroundColor(SCRIM)
+            setOnClickListener { showMenu() }
+        }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
@@ -228,6 +233,7 @@ class MainActivity : Activity() {
         val panel = PaperPanel(this).apply {
             val padH = (20 * dp).toInt()
             setPadding(padH, (18 * dp).toInt(), padH, (18 * dp).toInt())
+            isClickable = true
         }
 
         val text = PaperTextView(this).apply {
@@ -239,14 +245,55 @@ class MainActivity : Activity() {
             setPadding((8 * dp).toInt(), 0, 0, (8 * dp).toInt())
         }
 
-        val back = menuButton("返回").apply { setOnClickListener { showMenu() } }
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(text, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(back, LinearLayout.LayoutParams(
+        }
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+
+        root.addView(panel, FrameLayout.LayoutParams(
+            panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER
+        })
+
+        setContentView(root)
+        hideSystemBars()
+    }
+
+    private fun showEditor() {
+        val dp = resources.displayMetrics.density
+        val root = FrameLayout(this)
+        root.addView(OceanView(this), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(View(this).apply {
+            setBackgroundColor(SCRIM)
+            setOnClickListener { showMenu() }
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        val panelWidth = min(
+            (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
+            (420 * dp).toInt()
+        )
+        val panel = PaperPanel(this).apply {
+            val padH = (20 * dp).toInt()
+            setPadding(padH, (18 * dp).toInt(), padH, (18 * dp).toInt())
+            isClickable = true
+        }
+
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        listOf("编辑船只", "编辑战役", "返回").forEachIndexed { index, label ->
+            val button = menuButton(label).apply {
+                when (label) {
+                    "编辑船只" -> setOnClickListener { showShipEditor() }
+                    "返回" -> setOnClickListener { showMenu() }
+                }
+            }
+            column.addView(button, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (12 * dp).toInt()
+                topMargin = if (index == 0) 0 else (10 * dp).toInt()
             })
         }
         panel.addView(column, FrameLayout.LayoutParams(
@@ -254,6 +301,62 @@ class MainActivity : Activity() {
 
         root.addView(panel, FrameLayout.LayoutParams(
             panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER
+        })
+
+        setContentView(root)
+        hideSystemBars()
+    }
+
+    // 船只编辑器壳：目前只有画布框架，零件与操作待接入
+    private fun showShipEditor() {
+        val dp = resources.displayMetrics.density
+        val root = FrameLayout(this)
+        root.addView(OceanView(this), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(View(this).apply {
+            setBackgroundColor(SCRIM)
+            setOnClickListener { showEditor() }
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        val panelWidth = min(
+            (resources.displayMetrics.widthPixels - 32 * dp).toInt(),
+            (640 * dp).toInt()
+        )
+        val panelHeight = (resources.displayMetrics.heightPixels * 0.8f).toInt()
+
+        val panel = PaperPanel(this).apply {
+            setPadding((24 * dp).toInt(), (20 * dp).toInt(), (24 * dp).toInt(), (20 * dp).toInt())
+            isClickable = true
+        }
+
+        val title = TextView(this).apply {
+            text = "船只编辑器"
+            textSize = 24f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+        }
+        val hint = TextView(this).apply {
+            text = "画布与零件库待接入"
+            textSize = 16f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#5A5A5A"))
+        }
+
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(title, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(hint, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (10 * dp).toInt()
+            })
+        }
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
             gravity = Gravity.CENTER
         })
 
