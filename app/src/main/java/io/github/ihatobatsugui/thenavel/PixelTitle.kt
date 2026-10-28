@@ -8,8 +8,8 @@ import android.widget.TextView
 import kotlin.math.roundToInt
 
 /**
- * 立体标题：把文字按 1 格步进重复绘制若干层暗色，再画主色，
- * 得到像素风的厚度感（不用模糊阴影，避免糊边）。
+ * 立体标题：1 格暗色描边 + 若干层 1 格步进的深色偏移，再画主色。
+ * 不用系统合成粗体（Unifont 笔画会被撑满、字黏在一起），厚度全部由偏移层提供。
  */
 class PixelTitle @JvmOverloads constructor(
     context: Context,
@@ -18,19 +18,31 @@ class PixelTitle @JvmOverloads constructor(
 
     private val unit = resources.displayMetrics.density.roundToInt().coerceAtLeast(1)
 
-    var depth: Int = 4
-    var extrusionColor: Int = Color.parseColor("#6E5A33")
+    var depth: Int = 3
+    var extrusionColor: Int = Color.parseColor("#5A4527")
+    var outlineColor: Int = Color.parseColor("#241C10")
 
     override fun onDraw(canvas: Canvas) {
         val p = paint
         val mainColor = p.color
-        for (i in depth downTo 1) {
+
+        p.color = outlineColor
+        val dirs = arrayOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1)
+        for ((dx, dy) in dirs) {
             canvas.save()
-            canvas.translate((i * unit).toFloat(), (i * unit).toFloat())
-            p.color = extrusionColor
+            canvas.translate((dx * unit).toFloat(), (dy * unit).toFloat())
             super.onDraw(canvas)
             canvas.restore()
         }
+
+        p.color = extrusionColor
+        for (i in depth downTo 1) {
+            canvas.save()
+            canvas.translate((i * unit).toFloat(), (i * unit).toFloat())
+            super.onDraw(canvas)
+            canvas.restore()
+        }
+
         p.color = mainColor
         super.onDraw(canvas)
     }

@@ -5,13 +5,13 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -21,7 +21,6 @@ import kotlin.math.min
 class MainActivity : Activity() {
 
     private val pixelFont by lazy { resources.getFont(R.font.unifont) }
-    private val titleFont by lazy { Typeface.create(pixelFont, Typeface.BOLD) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,18 +33,19 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Color.parseColor("#10141A"))
             setPadding(0, 0, 0, (16 * dp).toInt())
         }
 
         val title = PixelTitle(this).apply {
             text = "The Navel"
             textSize = 48f
-            typeface = titleFont
+            typeface = pixelFont
+            letterSpacing = 0.12f
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#F2EAD3"))
-            extrusionColor = Color.parseColor("#6E5A33")
-            depth = 4
+            extrusionColor = Color.parseColor("#5A4527")
+            outlineColor = Color.parseColor("#241C10")
+            depth = 3
             setPadding(0, (24 * dp).toInt(), 0, 0)
         }
         root.addView(title, LinearLayout.LayoutParams(
@@ -120,7 +120,12 @@ class MainActivity : Activity() {
             topMargin = (16 * dp).toInt()
         })
 
-        setContentView(root)
+        val container = FrameLayout(this)
+        container.addView(OceanView(this), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        container.addView(root, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        setContentView(container)
         hideSystemBars()
     }
 
@@ -128,7 +133,7 @@ class MainActivity : Activity() {
         val dp = resources.displayMetrics.density
         val log = CrashReport.read(this) ?: "暂无错误记录"
 
-        val root = android.widget.FrameLayout(this).apply {
+        val root = FrameLayout(this).apply {
             setBackgroundColor(Color.parseColor("#10141A"))
         }
         val panelWidth = min(
@@ -178,11 +183,11 @@ class MainActivity : Activity() {
             addView(bar, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
-        panel.addView(column, android.widget.FrameLayout.LayoutParams(
-            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-            android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT))
 
-        root.addView(panel, android.widget.FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
+        root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
             gravity = Gravity.CENTER
         })
 
