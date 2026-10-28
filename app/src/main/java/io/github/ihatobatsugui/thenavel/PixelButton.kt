@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.TextView
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -111,10 +112,15 @@ class PixelButton @JvmOverloads constructor(
         val base = if (lightBand) blend(PLATE_DARK, PLATE_LIGHT, mix)
         else blend(PLATE_LIGHT, PLATE_DARK, mix)
 
-        // 方向光：整体上亮下暗，左侧略亮；不加球面高光
+        // 方向光：整体上亮下暗，左侧略亮；上部叠一条柔和高光
         val ny = cj.toFloat() / maxOf(pr - 1, 1)
         val nx = ci.toFloat() / maxOf(pc - 1, 1)
-        var factor = 1.06f - 0.14f * ny - 0.02f * nx + noise(ci, cj)
+        // 每条斜纹自身的亮度微差，避免整片均匀
+        val stripeIdx = (ci + cj) / STRIPE
+        val variance = (((stripeIdx.toLong() * 2654435761L) % 1000 + 1000) % 1000) / 1000f - 0.5f
+        var factor = 1.05f - 0.13f * ny - 0.02f * nx + noise(ci, cj) + variance * 0.03f
+        val sheen = maxOf(0f, 1f - abs(ny - 0.22f) / 0.35f)
+        factor += 0.035f * sheen
         // 贴框内阴影：左上重、右下轻
         if (ci == 0 || cj == 0) factor -= 0.10f
         if (ci == pc - 1 || cj == pr - 1) factor -= 0.04f
@@ -173,7 +179,7 @@ class PixelButton @JvmOverloads constructor(
 
     companion object {
         private const val GRID_DP = 1f
-        private const val MIN_ROWS = 64
+        private const val MIN_ROWS = 40
         private const val BORDER = 4
         private const val STRIPE = 8
         private const val RIVET = 6
