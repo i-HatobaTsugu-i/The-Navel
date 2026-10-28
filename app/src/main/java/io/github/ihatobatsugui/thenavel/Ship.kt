@@ -16,6 +16,7 @@ enum class LayerType(val label: String) {
 }
 
 data class ShipLayer(
+    var name: String = "",
     var type: LayerType = LayerType.HULL,
     // 绑定的图层序号（1 起），-1 表示不绑定
     var bindTo: Int = -1

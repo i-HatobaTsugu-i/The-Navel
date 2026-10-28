@@ -1,6 +1,7 @@
 package io.github.ihatobatsugui.thenavel
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -39,6 +40,8 @@ class MainActivity : Activity() {
         showMenu()
     }
 
+    // ---------- 主菜单 ----------
+
     private fun showMenu() {
         screen = Screen.MENU
         val dp = resources.displayMetrics.density
@@ -53,13 +56,11 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding((16 * dp).toInt(), (24 * dp).toInt(), (16 * dp).toInt(), 0)
         }
-
         val icon = ImageView(this).apply {
             setImageResource(R.drawable.ic_anchor_title)
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
-        header.addView(icon, LinearLayout.LayoutParams(
-            (56 * dp).toInt(), (56 * dp).toInt()))
+        header.addView(icon, LinearLayout.LayoutParams((56 * dp).toInt(), (56 * dp).toInt()))
 
         val title = TextView(this).apply {
             text = "The Navel"
@@ -73,11 +74,9 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             marginStart = (12 * dp).toInt()
         })
-
         root.addView(header, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        // 弹性空隔，把控件压到底部
         root.addView(View(this), LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -108,7 +107,6 @@ class MainActivity : Activity() {
                     marginStart = if (rowLayout.childCount == 0) 0 else (8 * dp).toInt()
                 })
             }
-            // 最后一行不满时补空位，保证按钮宽度与上一行一致
             repeat(3 - row.size) {
                 rowLayout.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply {
                     marginStart = (8 * dp).toInt()
@@ -131,9 +129,7 @@ class MainActivity : Activity() {
             typeface = pixelFont
             setTextColor(Color.parseColor("#8A9099"))
         }
-        val logButton = menuButton("错误日志").apply {
-            setOnClickListener { showLog() }
-        }
+        val logButton = menuButton("错误日志").apply { setOnClickListener { showLog() } }
         footer.addView(version, LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         footer.addView(logButton, LinearLayout.LayoutParams(
@@ -157,32 +153,51 @@ class MainActivity : Activity() {
         hideSystemBars()
     }
 
-    private fun showLog() {
-        screen = Screen.LOG
-        val dp = resources.displayMetrics.density
-        val log = CrashReport.read(this) ?: "暂无错误记录"
+    // ---------- 纸张页面通用外壳：纸张随内容变长，整张纸一起滚动 ----------
 
+    private fun showPaperPage(panel: View, widthPx: Int, onScrimTap: (() -> Unit)?) {
+        val dp = resources.displayMetrics.density
         val root = FrameLayout(this)
         root.addView(OceanView(this), FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(View(this).apply {
             setBackgroundColor(SCRIM)
-            setOnClickListener { showMenu() }
+            if (onScrimTap != null) setOnClickListener { onScrimTap() }
         }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        val host = FrameLayout(this)
+        host.addView(panel, FrameLayout.LayoutParams(widthPx,
+            FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            topMargin = (16 * dp).toInt()
+            bottomMargin = (16 * dp).toInt()
+        })
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(host)
+        }
+        root.addView(scroll, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        setContentView(root)
+        hideSystemBars()
+    }
+
+    // ---------- 错误日志 ----------
+
+    private fun showLog() {
+        screen = Screen.LOG
+        val dp = resources.displayMetrics.density
+        val log = CrashReport.read(this) ?: "暂无错误记录"
+
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
             (520 * dp).toInt()
         )
-        val panelHeight = min(
-            (resources.displayMetrics.heightPixels * 0.7f).toInt(),
-            (300 * dp).toInt()
-        )
-
         val panel = PaperPanel(this).apply {
             val padH = (20 * dp).toInt()
-            val padV = (18 * dp).toInt()
-            setPadding(padH, padV, padH, padV)
+            setPadding(padH, (18 * dp).toInt(), padH, (18 * dp).toInt())
             isClickable = true
         }
 
@@ -192,63 +207,39 @@ class MainActivity : Activity() {
             typeface = pixelFont
             setTextColor(Color.parseColor("#2B2B2B"))
             setBackgroundColor(Color.TRANSPARENT)
-            setPadding((8 * dp).toInt(), 0, 0, 0)
-        }
-        val scroll = ScrollView(this).apply {
-            // 内容不足一屏时也把 Textview 拉满，否则横线只画得出一行
-            isFillViewport = true
-            addView(body)
-        }
-
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, (8 * dp).toInt(), 0, 0)
+            setPadding((8 * dp).toInt(), 0, 0, (8 * dp).toInt())
         }
         val copy = menuButton("复制日志").apply { setOnClickListener { copyLog(log) } }
-        bar.addView(copy, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(scroll, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-            addView(bar, LinearLayout.LayoutParams(
+            addView(body, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(copy, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (12 * dp).toInt()
+            })
         }
         panel.addView(column, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT))
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
-        root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
-            gravity = Gravity.CENTER
-        })
-
-        setContentView(root)
-        hideSystemBars()
+        showPaperPage(panel, panelWidth) { showMenu() }
     }
+
+    // ---------- 鸣谢 ----------
 
     private fun showCredits() {
         screen = Screen.CREDITS
         val dp = resources.displayMetrics.density
-        val root = FrameLayout(this)
-        root.addView(OceanView(this), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(View(this).apply {
-            setBackgroundColor(SCRIM)
-            setOnClickListener { showMenu() }
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
             (420 * dp).toInt()
         )
-
         val panel = PaperPanel(this).apply {
             val padH = (20 * dp).toInt()
             setPadding(padH, (18 * dp).toInt(), padH, (18 * dp).toInt())
             isClickable = true
         }
-
         val text = PaperTextView(this).apply {
             text = "代码:Deepseek大肥鱼\n美工:Deepseek大肥鱼,鳩羽つぐ"
             textSize = 16f
@@ -257,36 +248,16 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((8 * dp).toInt(), 0, 0, (8 * dp).toInt())
         }
-
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(text, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        }
-        panel.addView(column, FrameLayout.LayoutParams(
+        panel.addView(text, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-
-        root.addView(panel, FrameLayout.LayoutParams(
-            panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            gravity = Gravity.CENTER
-        })
-
-        setContentView(root)
-        hideSystemBars()
+        showPaperPage(panel, panelWidth) { showMenu() }
     }
+
+    // ---------- 编辑器菜单 ----------
 
     private fun showEditor() {
         screen = Screen.EDITOR
         val dp = resources.displayMetrics.density
-        val root = FrameLayout(this)
-        root.addView(OceanView(this), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(View(this).apply {
-            setBackgroundColor(SCRIM)
-            setOnClickListener { showMenu() }
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
             (420 * dp).toInt()
@@ -296,13 +267,10 @@ class MainActivity : Activity() {
             setPadding(padH, (18 * dp).toInt(), padH, (18 * dp).toInt())
             isClickable = true
         }
-
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         listOf("编辑船只", "编辑战役").forEachIndexed { index, label ->
             val button = menuButton(label).apply {
-                when (label) {
-                    "编辑船只" -> setOnClickListener { showShipEditor() }
-                }
+                if (label == "编辑船只") setOnClickListener { showShipEditor() }
             }
             column.addView(button, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -311,27 +279,14 @@ class MainActivity : Activity() {
         }
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-
-        root.addView(panel, FrameLayout.LayoutParams(
-            panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            gravity = Gravity.CENTER
-        })
-
-        setContentView(root)
-        hideSystemBars()
+        showPaperPage(panel, panelWidth) { showMenu() }
     }
 
-    // 船只编辑器壳：目前只有画布框架，零件与操作待接入
+    // ---------- 船只编辑器 ----------
+
     private fun showShipEditor() {
         screen = Screen.SHIP_EDITOR
         val dp = resources.displayMetrics.density
-        val root = FrameLayout(this)
-        root.addView(OceanView(this), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        // 空白处不响应点击：只能按返回键或右上角“返回”退出
-        root.addView(View(this).apply { setBackgroundColor(SCRIM) }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 24 * dp).toInt(),
             (720 * dp).toInt()
@@ -348,10 +303,15 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        val newShip = menuButton("新建船只").apply { setOnClickListener { confirmNewShip() } }
         val load = menuButton("载入船只").apply { setOnClickListener { showLoadShips() } }
         val back = menuButton("返回").apply { setOnClickListener { showEditor() } }
-        topBar.addView(load, LinearLayout.LayoutParams(
+        topBar.addView(newShip, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        topBar.addView(load, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = (8 * dp).toInt()
+        })
         topBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         topBar.addView(back, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -416,21 +376,40 @@ class MainActivity : Activity() {
             topMargin = (14 * dp).toInt()
         })
 
-        val scroll = ScrollView(this).apply { addView(content) }
-        outer.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        outer.addView(content, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         panel.addView(outer, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
-        val panelHeight = (resources.displayMetrics.heightPixels * 0.92f).toInt()
-        root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
-            gravity = Gravity.CENTER
-        })
-
-        setContentView(root)
-        hideSystemBars()
+        showPaperPage(panel, panelWidth, null)
         refreshLayers()
+    }
+
+    private fun confirmNewShip() {
+        val draft = ShipStore.draft
+        val dirty = draft.code.isNotBlank() || draft.maxSpeed.isNotBlank() ||
+            draft.periodFrom.isNotBlank() || draft.periodTo.isNotBlank() ||
+            draft.layers.isNotEmpty()
+        if (!dirty) {
+            ShipStore.draft = Ship()
+            showShipEditor()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("当前内容尚未保存")
+            .setMessage("是否先保存当前船只，再新建？")
+            .setPositiveButton("保存并新建") { _, _ ->
+                saveShip(silent = true)
+                ShipStore.draft = Ship()
+                showShipEditor()
+            }
+            .setNegativeButton("直接新建") { _, _ ->
+                ShipStore.draft = Ship()
+                showShipEditor()
+            }
+            .setNeutralButton("取消", null)
+            .show()
     }
 
     private fun fieldParams(dp: Float): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
@@ -466,7 +445,6 @@ class MainActivity : Activity() {
         })
     }
 
-    // 表单行：标签 + 输入框（可带单位）+ 下方蓝线
     private fun fieldRow(
         label: String,
         initial: String,
@@ -507,7 +485,6 @@ class MainActivity : Activity() {
     }
 
     private fun periodRow(): View {
-        val dp = resources.displayMetrics.density
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -550,106 +527,137 @@ class MainActivity : Activity() {
         return container
     }
 
+    // ---------- 图层 ----------
+
+    private fun orderedLayers(): List<Pair<Int, Boolean>> {
+        val layers = ShipStore.draft.layers
+        val result = mutableListOf<Pair<Int, Boolean>>()
+        val isChild = BooleanArray(layers.size)
+        layers.indices.forEach { index ->
+            val bind = layers[index].bindTo
+            if (bind in 1..layers.size && bind - 1 != index) isChild[index] = true
+        }
+        layers.indices.forEach { index ->
+            if (isChild[index]) return@forEach
+            result.add(index to false)
+            layers.indices.forEach { child ->
+                if (layers[child].bindTo == index + 1) result.add(child to true)
+            }
+        }
+        layers.indices.forEach { index ->
+            if (result.none { it.first == index }) result.add(index to false)
+        }
+        return result
+    }
+
     private fun refreshLayers() {
         val box = layersBox ?: return
         val dp = resources.displayMetrics.density
         box.removeAllViews()
-        ShipStore.draft.layers.forEachIndexed { index, layer ->
-            box.addView(layerRow(index, layer, dp))
+        orderedLayers().forEach { (index, child) ->
+            box.addView(layerRow(index, ShipStore.draft.layers[index], child, dp))
         }
         shipPreview?.layers = ShipStore.draft.layers.toList()
     }
 
-    private fun layerRow(index: Int, layer: ShipLayer, dp: Float): View {
+    private fun layerRow(index: Int, layer: ShipLayer, child: Boolean, dp: Float): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+            setPadding(if (child) (24 * dp).toInt() else 0, (4 * dp).toInt(), 0, (4 * dp).toInt())
         }
         val name = TextView(this).apply {
             text = "${index + 1}."
-            textSize = 16f
+            textSize = if (child) 12f else 16f
             typeface = pixelFont
             includeFontPadding = false
             setTextColor(Color.parseColor("#2B2B2B"))
         }
-        val typeButton = menuButton(layer.type.label).apply {
+        val nameField = editField(layer.name, "图层名") { layer.name = it }.apply {
+            textSize = if (child) 12f else 16f
+        }
+        val typeButton = smallButton(layer.type.label, child).apply {
             setOnClickListener {
                 layer.type = layer.type.next()
                 refreshLayers()
             }
         }
-        val bindButton = menuButton(bindLabel(layer)).apply {
-            setOnClickListener {
-                cycleBind(layer, index)
-                refreshLayers()
-            }
+        val bindButton = smallButton(bindLabel(layer), child).apply {
+            setOnClickListener { showBindMenu(layer, index) }
         }
-        val remove = menuButton("×").apply {
-            setOnClickListener {
+        val trash = TrashView(this).apply {
+            onTap = {
                 ShipStore.draft.layers.removeAt(index)
                 refreshLayers()
             }
         }
+
         row.addView(name, LinearLayout.LayoutParams(
-            (28 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            (24 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(nameField, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(typeButton, LinearLayout.LayoutParams(
-            (104 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
-        row.addView(bindButton, LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             marginStart = (6 * dp).toInt()
         })
-        row.addView(remove, LinearLayout.LayoutParams(
-            (48 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        row.addView(bindButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             marginStart = (6 * dp).toInt()
+        })
+        row.addView(trash, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = (8 * dp).toInt()
         })
         return row
     }
 
     private fun bindLabel(layer: ShipLayer): String =
-        if (layer.bindTo <= 0) "绑定:无" else "绑定:图层${layer.bindTo}"
+        if (layer.bindTo <= 0) "绑定:无" else "绑定:${layer.bindTo}"
 
-    private fun cycleBind(layer: ShipLayer, index: Int) {
-        val total = ShipStore.draft.layers.size
-        val options = mutableListOf(-1)
-        for (k in 1..total) if (k != index + 1) options.add(k)
-        val position = options.indexOf(layer.bindTo)
-        layer.bindTo = options[(position + 1) % options.size]
+    private fun showBindMenu(layer: ShipLayer, index: Int) {
+        val layers = ShipStore.draft.layers
+        val labels = mutableListOf("无")
+        val values = mutableListOf(-1)
+        layers.forEachIndexed { other, item ->
+            if (other != index) {
+                val name = item.name.ifBlank { item.type.label }
+                labels.add("图层 ${other + 1}：$name")
+                values.add(other + 1)
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("绑定到哪个图层")
+            .setItems(labels.toTypedArray()) { _, which ->
+                layer.bindTo = values[which]
+                refreshLayers()
+            }
+            .show()
     }
 
-    private fun saveShip() {
+    // ---------- 保存与载入 ----------
+
+    private fun saveShip(silent: Boolean = false) {
         val draft = ShipStore.draft
         if (draft.code.isBlank()) {
-            Toast.makeText(this, "请先填写船只代号", Toast.LENGTH_SHORT).show()
+            if (!silent) Toast.makeText(this, "请先填写船只代号", Toast.LENGTH_SHORT).show()
             return
         }
         ShipStore.save(draft)
-        Toast.makeText(this, "已保存 ${draft.code}", Toast.LENGTH_SHORT).show()
+        if (!silent) Toast.makeText(this, "已保存 ${draft.code}", Toast.LENGTH_SHORT).show()
     }
 
     private fun showLoadShips() {
         screen = Screen.LOAD_SHIPS
         val dp = resources.displayMetrics.density
-        val root = FrameLayout(this)
-        root.addView(OceanView(this), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(View(this).apply {
-            setBackgroundColor(SCRIM)
-            setOnClickListener { showShipEditor() }
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 40 * dp).toInt(),
             (520 * dp).toInt()
         )
-        val panelHeight = (resources.displayMetrics.heightPixels * 0.8f).toInt()
         val panel = PaperPanel(this).apply {
             val padH = (20 * dp).toInt()
             setPadding(padH, (16 * dp).toInt(), padH, (16 * dp).toInt())
             isClickable = true
         }
-
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val title = TextView(this).apply {
             text = "载入船只"
@@ -662,9 +670,8 @@ class MainActivity : Activity() {
         column.addView(title, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (ShipStore.ships.isEmpty()) {
-            list.addView(TextView(this).apply {
+            column.addView(TextView(this).apply {
                 text = "暂无已保存的船只"
                 textSize = 16f
                 typeface = pixelFont
@@ -672,20 +679,12 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         } else {
-            ShipStore.ships.forEach { ship -> list.addView(shipEntry(ship, dp)) }
+            ShipStore.ships.forEach { ship -> column.addView(shipEntry(ship, dp)) }
         }
-        val scroll = ScrollView(this).apply { addView(list) }
-        column.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
         panel.addView(column, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
-            gravity = Gravity.CENTER
-        })
-
-        setContentView(root)
-        hideSystemBars()
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        showPaperPage(panel, panelWidth) { showShipEditor() }
     }
 
     private fun shipEntry(ship: Ship, dp: Float): View {
@@ -716,7 +715,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         info.addView(TextView(this).apply {
             text = "最后修改 ${ship.modifiedAt}"
-            textSize = 16f
+            textSize = 12f
             typeface = pixelFont
             setTextColor(Color.parseColor("#5A5A5A"))
         }, LinearLayout.LayoutParams(
@@ -726,25 +725,29 @@ class MainActivity : Activity() {
             marginStart = (10 * dp).toInt()
         })
 
-        val delete = menuButton("删除").apply {
-            setOnClickListener {
+        val trash = TrashView(this).apply {
+            onTap = {
                 ShipStore.delete(ship)
                 showLoadShips()
             }
         }
-        row.addView(delete, LinearLayout.LayoutParams(
+        row.addView(trash, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         return row
     }
 
-    private fun menuButton(label: String): PixelButton = PixelButton(this).apply {
+    // ---------- 按钮与工具 ----------
+
+    private fun menuButton(label: String): PixelButton = smallButton(label, false)
+
+    private fun smallButton(label: String, small: Boolean): PixelButton = PixelButton(this).apply {
         text = label
-        textSize = 16f
+        textSize = if (small) 12f else 16f
         typeface = pixelFont
         setTextColor(Color.parseColor("#16191F"))
-        val padH = (12 * resources.displayMetrics.density).toInt()
-        val padV = (6 * resources.displayMetrics.density).toInt()
-        setPadding(padH, padV, padH, padV)
+        val padH = (if (small) 6 else 12) * resources.displayMetrics.density
+        val padV = (if (small) 3 else 6) * resources.displayMetrics.density
+        setPadding(padH.toInt(), padV.toInt(), padH.toInt(), padV.toInt())
     }
 
     private fun copyLog(log: String) {
