@@ -24,8 +24,6 @@ class MainActivity : Activity() {
                 text = label
                 textSize = 16f
                 setTextColor(Color.WHITE)
-                frameColor = Color.WHITE
-                frameColorPressed = Color.parseColor("#FFD166")
                 val padH = (10 * dp).toInt()
                 val padV = (6 * dp).toInt()
                 setPadding(padH, padV, padH, padV)
