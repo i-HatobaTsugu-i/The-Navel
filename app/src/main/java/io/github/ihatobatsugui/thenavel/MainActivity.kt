@@ -211,6 +211,10 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (10 * dp).toInt()
             })
+            addView(linkButton("返回") { showMenu() }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (8 * dp).toInt()
+            })
         }
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -235,7 +239,15 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((8 * dp).toInt(), 0, 0, (8 * dp).toInt())
         }
-        panel.addView(text, FrameLayout.LayoutParams(
+        panel.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(linkButton("返回") { showMenu() }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (10 * dp).toInt()
+            })
+        }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         showPaperPage(panel, panelWidth) { showMenu() }
     }
@@ -259,6 +271,10 @@ class MainActivity : Activity() {
                 topMargin = if (index == 0) 0 else (12 * dp).toInt()
             })
         }
+        column.addView(linkButton("返回") { showMenu() }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (12 * dp).toInt()
+        })
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         showPaperPage(panel, panelWidth) { showMenu() }
@@ -283,7 +299,7 @@ class MainActivity : Activity() {
         }
         topBar.addView(iconView(R.drawable.ic_plus) { confirmNewShip() },
             LinearLayout.LayoutParams((32 * dp).toInt(), (32 * dp).toInt()))
-        topBar.addView(iconView(R.drawable.ic_folder) { showLoadShips() },
+        topBar.addView(iconView(R.drawable.ic_floppy) { showLoadShips() },
             LinearLayout.LayoutParams((32 * dp).toInt(), (32 * dp).toInt()).apply {
             marginStart = (12 * dp).toInt()
         })
@@ -379,8 +395,8 @@ class MainActivity : Activity() {
     private fun askText(
         title: String,
         initial: String,
-        numeric: Boolean,
         maxLen: Int,
+        keyRows: List<String>? = null,
         onDone: (String) -> Unit
     ) {
         val dp = resources.displayMetrics.density
@@ -434,15 +450,8 @@ class MainActivity : Activity() {
             })
         }
 
-        if (numeric) {
-            addRow("1234567890")
-            addRow(".-")
-        } else {
-            addRow("1234567890")
-            addRow("QWERTYUIOP")
-            addRow("ASDFGHJKL")
-            addRow("ZXCVBNM_-")
-        }
+        val rows = keyRows ?: listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM_-")
+        rows.forEach { addRow(it) }
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(smallKey("退格") {
@@ -580,7 +589,8 @@ class MainActivity : Activity() {
             else Color.parseColor("#1F1F1F"))
             isClickable = true
             setOnClickListener {
-                askText(label, current, numeric, maxLen) { v ->
+                askText(label, current, maxLen,
+                    if (numeric) listOf("1234567890", ".-") else null) { v ->
                     current = v
                     onChange(v)
                     text = if (v.isEmpty()) hint else v
@@ -654,7 +664,7 @@ class MainActivity : Activity() {
             else Color.parseColor("#1F1F1F"))
             isClickable = true
             setOnClickListener {
-                askText(title, current, false, 12) { v ->
+                askText(title, current, 12, listOf("1234567890", ",")) { v ->
                     current = v
                     onChange(v)
                     text = if (v.isEmpty()) "Y,M,D" else v
@@ -723,7 +733,7 @@ class MainActivity : Activity() {
 
         // 层数
         val levelView = plainText(layer.level.toString(), Color.parseColor("#1F1F1F")) {
-            askText("层数", layer.level.toString(), true, 3) { v ->
+            askText("层数", layer.level.toString(), 3, listOf("1234567890")) { v ->
                 layer.level = v.toIntOrNull() ?: layer.level
                 refreshLayers()
             }
@@ -736,7 +746,7 @@ class MainActivity : Activity() {
             layer.name.ifEmpty { "图层名" },
             if (layer.name.isEmpty()) Color.parseColor("#9A9384") else Color.parseColor("#1F1F1F")
         ) {
-            askText("图层名", layer.name, false, 12) { v ->
+            askText("图层名", layer.name, 12) { v ->
                 layer.name = v
                 refreshLayers()
             }
@@ -883,6 +893,11 @@ class MainActivity : Activity() {
         } else {
             ShipStore.ships.forEach { ship -> column.addView(shipEntry(ship, dp)) }
         }
+
+        column.addView(linkButton("返回") { showShipEditor() }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (10 * dp).toInt()
+        })
 
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
