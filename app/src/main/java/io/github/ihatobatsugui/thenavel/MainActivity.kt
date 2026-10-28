@@ -1,7 +1,6 @@
 package io.github.ihatobatsugui.thenavel
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -374,20 +373,64 @@ class MainActivity : Activity() {
             showShipEditor()
             return
         }
-        AlertDialog.Builder(this)
-            .setTitle("当前内容尚未保存")
-            .setMessage("是否先保存当前船只，再新建？")
-            .setPositiveButton("保存并新建") { _, _ ->
+        showPaperDialog("当前内容尚未保存", "是否先保存当前船只，再新建？") { column, dialog ->
+            column.addView(linkButton("保存并新建") {
+                dialog.dismiss()
                 saveShip(silent = true)
                 ShipStore.draft = Ship()
                 showShipEditor()
-            }
-            .setNegativeButton("直接新建") { _, _ ->
+            }, dialogButtonParams())
+            column.addView(linkButton("直接新建") {
+                dialog.dismiss()
                 ShipStore.draft = Ship()
                 showShipEditor()
-            }
-            .setNeutralButton("取消", null)
-            .show()
+            }, dialogButtonParams())
+            column.addView(linkButton("取消") { dialog.dismiss() }, dialogButtonParams())
+        }
+    }
+
+    private fun dialogButtonParams(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        topMargin = (10 * resources.displayMetrics.density).toInt()
+    }
+
+    // 纸张风格的弹窗（替代系统 AlertDialog）
+    private fun showPaperDialog(
+        title: String,
+        message: String?,
+        build: (LinearLayout, Dialog) -> Unit
+    ) {
+        val dp = resources.displayMetrics.density
+        val dialog = Dialog(this)
+        val panel = paperPanel()
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(TextView(this).apply {
+            text = title
+            textSize = 20f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        if (message != null) {
+            column.addView(TextView(this).apply {
+                text = message
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#3A3A3A"))
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (6 * dp).toInt()
+            })
+        }
+        build(column, dialog)
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        dialog.setContentView(panel)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            min((resources.displayMetrics.widthPixels - 80 * dp).toInt(), (420 * dp).toInt()),
+            LinearLayout.LayoutParams.WRAP_CONTENT)
+        dialog.show()
     }
 
     // ---------- 输入：自绘键盘，不弹系统输入法 ----------
@@ -842,13 +885,15 @@ class MainActivity : Activity() {
                 values.add(other + 1)
             }
         }
-        AlertDialog.Builder(this)
-            .setTitle("绑定到哪个图层")
-            .setItems(labels.toTypedArray()) { _, which ->
-                layer.bindTo = values[which]
-                refreshLayers()
+        showPaperDialog("绑定到哪个图层", null) { column, dialog ->
+            labels.forEachIndexed { which, label ->
+                column.addView(linkButton(label) {
+                    layer.bindTo = values[which]
+                    dialog.dismiss()
+                    refreshLayers()
+                }, dialogButtonParams())
             }
-            .show()
+        }
     }
 
     // ---------- 保存与载入 ----------
