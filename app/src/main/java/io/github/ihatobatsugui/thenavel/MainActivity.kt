@@ -48,18 +48,15 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
         header.addView(icon, LinearLayout.LayoutParams(
-            (64 * dp).toInt(), (64 * dp).toInt()))
+            (56 * dp).toInt(), (56 * dp).toInt()))
 
-        val title = PixelTitle(this).apply {
+        val title = TextView(this).apply {
             text = "The Navel"
             textSize = 48f
             typeface = pixelFont
             letterSpacing = 0.18f
             gravity = Gravity.CENTER_VERTICAL
             setTextColor(Color.parseColor("#F2EAD3"))
-            extrusionNear = Color.parseColor("#7A6238")
-            extrusionFar = Color.parseColor("#2A2114")
-            depth = 4
         }
         header.addView(title, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {

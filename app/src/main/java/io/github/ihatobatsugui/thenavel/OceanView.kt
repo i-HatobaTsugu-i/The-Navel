@@ -15,10 +15,9 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * 海面背景：深蓝水面 + 稀疏的白色碎沫团。
- * 泡沫用两套不同尺度/流速的值噪声 fBm 合成——没有正弦叠加的周期性，
- * 再按密度用混淆哈希撒点，边缘才是碎的而不是整块白。
- * 整片按 2dp 一格渲染到位图后最近邻放大，像素颗粒清晰；8fps 足够表现海浪。
+ * 海面背景：蓝底 + 白色碎沫。
+ * 泡沫有生命周期：开局只播一次种子，之后靠"聚集场"生长、每帧衰减、随流漂移（双线性采样，运动平滑）。
+ * 整片按 2dp 一格渲染到位图后最近邻放大，像素颗粒清晰；15fps。
  */
 class OceanView @JvmOverloads constructor(
     context: Context,
@@ -31,7 +30,8 @@ class OceanView @JvmOverloads constructor(
 
     private var bitmap: Bitmap? = null
     private var pixels = IntArray(0)
-    private var foam = FloatArray(0)
+    private var foamA = FloatArray(0)
+    private var foamB = FloatArray(0)
     private var convBuf = FloatArray(0)
     private var detailBuf = FloatArray(0)
     private var frameIndex = 0
@@ -46,7 +46,8 @@ class OceanView @JvmOverloads constructor(
         bitmap?.recycle()
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
-        foam = FloatArray(cols * rows)
+        foamA = FloatArray(cols * rows)
+        foamB = FloatArray(cols * rows)
         convBuf = FloatArray(cols * rows)
         detailBuf = FloatArray(cols * rows)
         frameIndex = 0
@@ -70,31 +71,42 @@ class OceanView @JvmOverloads constructor(
 
     private fun render(t: Float) {
         val stamp = (t * 5).toInt()
-        val drift = frameIndex % 2 == 0
-        if (drift) updateFields(t)
+        if (frameIndex % 3 == 0) updateFields(t)
+
+        if (frameIndex == 0) {
+            // 开局只在这里撒一次种子，之后泡沫全部由聚集生长产生
+            var idx = 0
+            for (j in 0 until rows) {
+                for (i in 0 until cols) {
+                    foamA[idx++] = if (hash01(i, j, 4242) < SEED_RATE) 0.9f else 0f
+                }
+            }
+        } else {
+            var idx = 0
+            for (j in 0 until rows) {
+                for (i in 0 until cols) {
+                    val prev = sampleBilinear(foamA, i + DRIFT_X, j + DRIFT_Y)
+                    val grow = max(0f, (convBuf[idx] - 0.60f) / 0.40f) *
+                        (0.25f + 1.5f * detailBuf[idx]) * GROW
+                    foamB[idx] = (prev * DECAY + grow).coerceIn(0f, 1f)
+                    idx++
+                }
+            }
+            val swap = foamA
+            foamA = foamB
+            foamB = swap
+        }
+
         var index = 0
         for (j in 0 until rows) {
             val depth = j.toFloat() / max(rows - 1, 1)
-            val base = lerpColor(SHALLOW, DEEP, depth.pow(0.7f))
+            val water = lerpColor(SHALLOW, DEEP, depth.pow(0.8f))
             for (i in 0 until cols) {
-                val patch = fbm(i * 0.055f - t * 0.22f, j * 0.045f + t * 0.05f, 1)
-                val water = shaded(base, 0.86f + 0.30f * patch)
-
-                val prevIndex = if (drift) j * cols + (i + 1) % cols else index
-                val value = if (frameIndex == 0) {
-                    // 开局只在少量位置播下种子，其余靠后面的聚集生长
-                    if (hash01(i, j, 4242) < SEED_RATE) 0.9f else 0f
-                } else {
-                    val grow = max(0f, (convBuf[index] - 0.58f) / 0.42f) *
-                        (0.2f + 1.6f * detailBuf[index]) * GROW
-                    (foam[prevIndex] * DECAY + grow).coerceIn(0f, 1f)
-                }
-                foam[index] = value
-
+                val value = foamA[index]
                 val r = hash01(i, j, stamp)
                 pixels[index++] = when {
-                    r < value * 0.95f -> FOAM
-                    r < value * 1.50f -> blend(water, FOAM_DIM, 0.65f)
+                    r < value * 0.75f -> FOAM
+                    r < value * 1.20f -> blend(water, FOAM_DIM, 0.65f)
                     else -> water
                 }
             }
@@ -102,16 +114,31 @@ class OceanView @JvmOverloads constructor(
         frameIndex++
     }
 
-    // 聚集场变化慢，隔帧重算一次即可
+    // 聚集场变化慢，隔 3 帧重算一次即可
     private fun updateFields(t: Float) {
         var index = 0
         for (j in 0 until rows) {
             for (i in 0 until cols) {
-                convBuf[index] = fbm(i * 0.035f - t * 0.06f, j * 0.035f, 9)
-                detailBuf[index] = fbm(i * 0.14f, j * 0.14f, 21)
+                convBuf[index] = fbm(i * 0.035f - t * 0.25f, j * 0.035f + t * 0.05f, 9)
+                detailBuf[index] = fbm(i * 0.14f + t * 0.03f, j * 0.14f, 21)
                 index++
             }
         }
+    }
+
+    private fun sampleBilinear(source: FloatArray, fx: Float, fy: Float): Float {
+        var x = fx % cols
+        if (x < 0f) x += cols
+        val y = fy.coerceIn(0f, (rows - 1).toFloat())
+        val x0 = x.toInt()
+        val y0 = y.toInt()
+        val x1 = if (x0 + 1 >= cols) 0 else x0 + 1
+        val y1 = if (y0 + 1 >= rows) rows - 1 else y0 + 1
+        val tx = x - x0
+        val ty = y - y0
+        val top = source[y0 * cols + x0] + (source[y0 * cols + x1] - source[y0 * cols + x0]) * tx
+        val bottom = source[y1 * cols + x0] + (source[y1 * cols + x1] - source[y1 * cols + x0]) * tx
+        return top + (bottom - top) * ty
     }
 
     private fun hash01(ix: Int, iy: Int, s: Int): Float {
@@ -154,17 +181,6 @@ class OceanView @JvmOverloads constructor(
         return total / norm
     }
 
-    private fun smoothStep(edge0: Float, edge1: Float, x: Float): Float {
-        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
-        return t * t * (3f - 2f * t)
-    }
-
-    private fun shaded(base: Int, factor: Float): Int = Color.rgb(
-        (Color.red(base) * factor).roundToInt().coerceIn(0, 255),
-        (Color.green(base) * factor).roundToInt().coerceIn(0, 255),
-        (Color.blue(base) * factor).roundToInt().coerceIn(0, 255)
-    )
-
     private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
         (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt().coerceIn(0, 255),
         (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt().coerceIn(0, 255),
@@ -178,14 +194,16 @@ class OceanView @JvmOverloads constructor(
     )
 
     companion object {
-        private const val FRAME_MS = 125L
+        private const val FRAME_MS = 66L
         private const val OCTAVES = 2
-        private const val DECAY = 0.72f
-        private const val GROW = 0.06f
+        private const val DECAY = 0.90f
+        private const val GROW = 0.035f
         private const val SEED_RATE = 0.005f
-        private val DEEP = Color.parseColor("#081A29")
-        private val SHALLOW = Color.parseColor("#17435C")
-        private val FOAM = Color.parseColor("#D2E2EA")
-        private val FOAM_DIM = Color.parseColor("#86A4B4")
+        private const val DRIFT_X = 0.35f
+        private const val DRIFT_Y = 0.12f
+        private val SHALLOW = Color.parseColor("#2F7396")
+        private val DEEP = Color.parseColor("#0F2C40")
+        private val FOAM = Color.parseColor("#E6F1F6")
+        private val FOAM_DIM = Color.parseColor("#9DBECE")
     }
 }
