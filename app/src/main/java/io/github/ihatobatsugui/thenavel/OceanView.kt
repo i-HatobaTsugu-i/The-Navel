@@ -103,8 +103,8 @@ class OceanView @JvmOverloads constructor(
 
                 val r = hash01(i, j, stamp)
                 pixels[index++] = when {
-                    r < value * 0.42f -> FOAM
-                    r < value * 0.80f -> blend(water, FOAM_DIM, 0.60f)
+                    r < value * 0.105f -> FOAM
+                    r < value * 0.20f -> blend(water, FOAM_DIM, 0.60f)
                     else -> water
                 }
             }
