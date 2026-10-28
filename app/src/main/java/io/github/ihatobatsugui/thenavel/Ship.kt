@@ -18,6 +18,8 @@ enum class LayerType(val label: String) {
 data class ShipLayer(
     var name: String = "",
     var type: LayerType = LayerType.HULL,
+    // 图层所处层数（可填写）
+    var level: Int = 1,
     // 绑定的图层序号（1 起），-1 表示不绑定
     var bindTo: Int = -1,
     // 导入的图层图片路径（复制到应用私有目录后的绝对路径）

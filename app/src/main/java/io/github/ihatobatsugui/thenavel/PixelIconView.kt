@@ -9,15 +9,22 @@ import android.view.View
 import kotlin.math.roundToInt
 
 /**
- * 通用像素图标按钮：按字符图案逐格绘制（1dp 一格），点击有轻微缩放。
+ * 通用像素图标按钮：按字符图案逐格绘制。cellScale 控制图标整体大小（1 格 = cellScale × 1dp）。
  */
 class PixelIconView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val unit = resources.displayMetrics.density.roundToInt().coerceAtLeast(1)
+    private val baseUnit = resources.displayMetrics.density.roundToInt().coerceAtLeast(1)
     private val paint = Paint().apply { isAntiAlias = false }
+
+    var cellScale: Int = 1
+        set(value) {
+            field = value.coerceAtLeast(1)
+            requestLayout()
+            invalidate()
+        }
 
     var pattern: Array<String> = emptyArray()
         set(value) {
@@ -39,11 +46,13 @@ class PixelIconView @JvmOverloads constructor(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val cols = pattern.maxOfOrNull { it.length } ?: 1
         val rows = pattern.size.coerceAtLeast(1)
+        val unit = baseUnit * cellScale
         setMeasuredDimension(cols * unit, rows * unit)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        val unit = baseUnit * cellScale
         for (y in pattern.indices) {
             val row = pattern[y]
             for (x in row.indices) {
