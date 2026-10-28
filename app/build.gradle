@@ -3,6 +3,12 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// 版本号由 CI 传入（形如 2026.10.28.1），本地直接构建时读 version.txt
+def versionFile = rootProject.file('version.txt')
+def appVersionName = (project.findProperty('appVersion')
+        ?: (versionFile.exists() ? versionFile.text.trim() : '0.0.0')).toString()
+def appVersionDigits = appVersionName.replaceAll('[^0-9]', '')
+
 // 固定签名密钥：CI 首次构建时生成并提交到 signing/keystore.p12
 // 只有始终用同一把钥匙签名，安装过的旧版本才能被覆盖更新
 def signingStore = rootProject.file('signing/keystore.p12')
@@ -15,8 +21,8 @@ android {
         applicationId 'io.github.ihatobatsugui.thenavel'
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName '0.1.0'
+        versionCode appVersionDigits ? appVersionDigits.toInteger() : 1
+        versionName appVersionName
     }
 
     signingConfigs {
