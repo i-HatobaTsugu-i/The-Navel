@@ -32,6 +32,8 @@ class OceanView @JvmOverloads constructor(
     private var bitmap: Bitmap? = null
     private var pixels = IntArray(0)
     private var foam = FloatArray(0)
+    private var convBuf = FloatArray(0)
+    private var detailBuf = FloatArray(0)
     private var frameIndex = 0
     private var cols = 0
     private var rows = 0
@@ -45,6 +47,8 @@ class OceanView @JvmOverloads constructor(
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
         foam = FloatArray(cols * rows)
+        convBuf = FloatArray(cols * rows)
+        detailBuf = FloatArray(cols * rows)
         frameIndex = 0
         startAt = SystemClock.uptimeMillis()
         lastFrameAt = 0L
@@ -67,35 +71,45 @@ class OceanView @JvmOverloads constructor(
     private fun render(t: Float) {
         val stamp = (t * 5).toInt()
         val drift = frameIndex % 2 == 0
-        frameIndex++
+        if (drift) updateFields(t)
         var index = 0
         for (j in 0 until rows) {
             val depth = j.toFloat() / max(rows - 1, 1)
             val base = lerpColor(SHALLOW, DEEP, depth.pow(0.7f))
-            val py = j * 0.045f + t * 0.05f
-            val ty = j * 0.120f + t * 0.18f
             for (i in 0 until cols) {
-                val patch = fbm(i * 0.055f - t * 0.22f, py, 1)
-                val tex = fbm(i * 0.130f - t * 0.5f, ty, 72)
+                val patch = fbm(i * 0.055f - t * 0.22f, j * 0.045f + t * 0.05f, 1)
+                val water = shaded(base, 0.86f + 0.30f * patch)
 
-                val shade = 0.84f + 0.30f * patch
-                val water = shaded(base, shade)
-
-                val mask = smoothStep(0.48f, 0.68f, patch)
-                val f = 0.55f * patch + 0.45f * tex
-                val source = max(0f, (f - 0.54f) / 0.20f) * mask
-
-                // 泡沫有生命周期：先按漂移取上一帧的值、衰减，再叠加新生的泡沫
                 val prevIndex = if (drift) j * cols + (i + 1) % cols else index
-                val value = (foam[prevIndex] * DECAY + source * 0.25f).coerceIn(0f, 1f)
+                val value = if (frameIndex == 0) {
+                    // 开局只在少量位置播下种子，其余靠后面的聚集生长
+                    if (hash01(i, j, 4242) < SEED_RATE) 0.9f else 0f
+                } else {
+                    val grow = max(0f, (convBuf[index] - 0.58f) / 0.42f) *
+                        (0.2f + 1.6f * detailBuf[index]) * GROW
+                    (foam[prevIndex] * DECAY + grow).coerceIn(0f, 1f)
+                }
                 foam[index] = value
 
                 val r = hash01(i, j, stamp)
                 pixels[index++] = when {
-                    r < value * 0.70f -> FOAM
-                    r < value * 1.20f -> blend(water, FOAM_DIM, 0.65f)
+                    r < value * 0.95f -> FOAM
+                    r < value * 1.50f -> blend(water, FOAM_DIM, 0.65f)
                     else -> water
                 }
+            }
+        }
+        frameIndex++
+    }
+
+    // 聚集场变化慢，隔帧重算一次即可
+    private fun updateFields(t: Float) {
+        var index = 0
+        for (j in 0 until rows) {
+            for (i in 0 until cols) {
+                convBuf[index] = fbm(i * 0.035f - t * 0.06f, j * 0.035f, 9)
+                detailBuf[index] = fbm(i * 0.14f, j * 0.14f, 21)
+                index++
             }
         }
     }
@@ -166,7 +180,9 @@ class OceanView @JvmOverloads constructor(
     companion object {
         private const val FRAME_MS = 125L
         private const val OCTAVES = 2
-        private const val DECAY = 0.85f
+        private const val DECAY = 0.72f
+        private const val GROW = 0.06f
+        private const val SEED_RATE = 0.005f
         private val DEEP = Color.parseColor("#081A29")
         private val SHALLOW = Color.parseColor("#17435C")
         private val FOAM = Color.parseColor("#D2E2EA")

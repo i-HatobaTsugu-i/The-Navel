@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -36,19 +37,36 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, (16 * dp).toInt())
         }
 
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((16 * dp).toInt(), (24 * dp).toInt(), (16 * dp).toInt(), 0)
+        }
+
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_anchor_title)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        header.addView(icon, LinearLayout.LayoutParams(
+            (64 * dp).toInt(), (64 * dp).toInt()))
+
         val title = PixelTitle(this).apply {
             text = "The Navel"
             textSize = 48f
             typeface = pixelFont
             letterSpacing = 0.18f
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_VERTICAL
             setTextColor(Color.parseColor("#F2EAD3"))
             extrusionNear = Color.parseColor("#7A6238")
             extrusionFar = Color.parseColor("#2A2114")
             depth = 4
-            setPadding(0, (24 * dp).toInt(), 0, 0)
         }
-        root.addView(title, LinearLayout.LayoutParams(
+        header.addView(title, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = (12 * dp).toInt()
+        })
+
+        root.addView(header, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         // 弹性空隔，把控件压到底部
