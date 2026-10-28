@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.Gravity
+import android.view.MotionEvent
 import android.widget.TextView
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -37,6 +38,17 @@ class PixelButton @JvmOverloads constructor(
         gravity = Gravity.CENTER
         setWillNotDraw(false)
         minimumHeight = MIN_ROWS * unit
+    }
+
+    // 按下时轻微缩小，抬起恢复
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> animate().scaleX(PRESS_SCALE).scaleY(PRESS_SCALE)
+                .setDuration(PRESS_MS).start()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> animate()
+                .scaleX(1f).scaleY(1f).setDuration(PRESS_MS).start()
+        }
+        return super.onTouchEvent(event)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -184,6 +196,8 @@ class PixelButton @JvmOverloads constructor(
         private const val STRIPE = 8
         private const val RIVET = 6
         private const val PRESS_OVERLAY = 0x33000000
+        private const val PRESS_SCALE = 0.94f
+        private const val PRESS_MS = 70L
 
         private val GOLD_LIGHT = Color.parseColor("#C8A96B")
         private val GOLD = Color.parseColor("#B08A45")

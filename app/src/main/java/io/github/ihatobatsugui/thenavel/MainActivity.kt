@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -15,10 +16,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import kotlin.math.min
 
 class MainActivity : Activity() {
 
     private val pixelFont by lazy { resources.getFont(R.font.unifont) }
+    private val titleFont by lazy { Typeface.create(pixelFont, Typeface.BOLD) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,24 +33,62 @@ class MainActivity : Activity() {
         val dp = resources.displayMetrics.density
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(Color.parseColor("#10141A"))
         }
 
-        val menu = listOf("新游戏", "载入", "模组", "设置", "退出")
-        menu.forEachIndexed { index, label ->
-            val button = menuButton(label)
-            root.addView(button, LinearLayout.LayoutParams(
-                (MENU_WIDTH_DP * dp).toInt(),
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = if (index == 0) 0 else (MENU_GAP_DP * dp).toInt()
+        val title = TextView(this).apply {
+            text = "The Navel"
+            textSize = 32f
+            typeface = titleFont
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#E8E4D8"))
+            setPadding(0, (24 * dp).toInt(), 0, (16 * dp).toInt())
+        }
+        root.addView(title, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val menu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val side = (16 * dp).toInt()
+            setPadding(side, 0, side, 0)
+        }
+        val maxWidth = min(
+            (resources.displayMetrics.widthPixels - 32 * dp).toInt(),
+            (640 * dp).toInt()
+        )
+
+        val labels = listOf("新游戏", "载入", "模组", "设置", "退出")
+        labels.chunked(3).forEachIndexed { rowIndex, row ->
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            row.forEach { label ->
+                val button = menuButton(label)
+                if (label == "退出") {
+                    button.setOnClickListener { finishAffinity() }
+                }
+                rowLayout.addView(button, LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = if (rowLayout.childCount == 0) 0 else (8 * dp).toInt()
+                })
+            }
+            // 最后一行不满时补空位，保证按钮宽度与上一行一致
+            repeat(3 - row.size) {
+                rowLayout.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply {
+                    marginStart = (8 * dp).toInt()
+                })
+            }
+            menu.addView(rowLayout, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = if (rowIndex == 0) 0 else (8 * dp).toInt()
             })
         }
 
         val footer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding((16 * dp).toInt(), 0, (16 * dp).toInt(), 0)
         }
         val version = TextView(this).apply {
             text = "版本 ${versionName()}"
@@ -59,15 +100,17 @@ class MainActivity : Activity() {
             setOnClickListener { showLog() }
         }
         footer.addView(version, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         footer.addView(logButton, LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            (132 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             marginStart = (12 * dp).toInt()
         })
+
+        root.addView(menu, LinearLayout.LayoutParams(
+            maxWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(footer, LinearLayout.LayoutParams(
-            (MENU_WIDTH_DP * dp).toInt(),
-            LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (MENU_GAP_DP * 2 * dp).toInt()
+            maxWidth, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (16 * dp).toInt()
         })
 
         setContentView(root)
@@ -78,10 +121,22 @@ class MainActivity : Activity() {
         val dp = resources.displayMetrics.density
         val log = CrashReport.read(this) ?: "暂无错误记录"
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F4EFE2"))
-            setPadding(0, 0, 0, 0)
+        val root = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#10141A"))
+        }
+        val panelWidth = min(
+            (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
+            (520 * dp).toInt()
+        )
+        val panelHeight = min(
+            (resources.displayMetrics.heightPixels * 0.7f).toInt(),
+            (300 * dp).toInt()
+        )
+
+        val panel = PaperPanel(this).apply {
+            val padH = (20 * dp).toInt()
+            val padV = (18 * dp).toInt()
+            setPadding(padH, padV, padH, padV)
         }
 
         val body = PaperTextView(this).apply {
@@ -89,33 +144,36 @@ class MainActivity : Activity() {
             textSize = 16f
             typeface = pixelFont
             setTextColor(Color.parseColor("#2B2B2B"))
-            setPadding((16 * dp).toInt(), (8 * dp).toInt(),
-                (12 * dp).toInt(), (8 * dp).toInt())
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding((8 * dp).toInt(), 0, 0, 0)
         }
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#F4EFE2"))
-            isFillViewport = true
-            addView(body)
-        }
-        root.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val scroll = ScrollView(this).apply { addView(body) }
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
+            setPadding(0, (8 * dp).toInt(), 0, 0)
         }
-        val copy = menuButton("复制日志").apply {
-            setOnClickListener { copyLog(log) }
-        }
-        val back = menuButton("返回").apply {
-            setOnClickListener { showMenu() }
-        }
+        val copy = menuButton("复制日志").apply { setOnClickListener { copyLog(log) } }
+        val back = menuButton("返回").apply { setOnClickListener { showMenu() } }
         bar.addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         bar.addView(back, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = (8 * dp).toInt()
         })
-        root.addView(bar, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(scroll, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(bar, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        panel.addView(column, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+
+        root.addView(panel, android.widget.FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
+            gravity = Gravity.CENTER
+        })
 
         setContentView(root)
         hideSystemBars()
@@ -164,10 +222,5 @@ class MainActivity : Activity() {
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 )
         }
-    }
-
-    companion object {
-        private const val MENU_WIDTH_DP = 220
-        private const val MENU_GAP_DP = 8
     }
 }
