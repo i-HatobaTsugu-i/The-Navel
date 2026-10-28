@@ -3,6 +3,10 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// 固定签名密钥：CI 首次构建时生成并提交到 signing/keystore.p12
+// 只有始终用同一把钥匙签名，安装过的旧版本才能被覆盖更新
+def signingStore = rootProject.file('signing/keystore.p12')
+
 android {
     namespace 'io.github.ihatobatsugui.thenavel'
     compileSdk 34
@@ -15,9 +19,24 @@ android {
         versionName '0.1.0'
     }
 
+    signingConfigs {
+        release {
+            if (signingStore.exists()) {
+                storeFile signingStore
+                storeType 'PKCS12'
+                storePassword 'thenavel'
+                keyAlias 'thenavel'
+                keyPassword 'thenavel'
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            if (signingStore.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
