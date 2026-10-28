@@ -11,10 +11,15 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -37,6 +42,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         CrashReport.install(this)
         showMenu()
     }
@@ -293,20 +299,16 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             marginStart = (12 * dp).toInt()
         })
-        topBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        topBar.addView(linkButton("返回") { showEditor() }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        outer.addView(topBar, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-        outer.addView(TextView(this).apply {
+        topBar.addView(TextView(this).apply {
             text = "船只编辑器"
             textSize = 24f
             typeface = pixelFont
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#2B2B2B"))
-            setPadding(0, (8 * dp).toInt(), 0, (6 * dp).toInt())
-        }, LinearLayout.LayoutParams(
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        topBar.addView(linkButton("返回") { showEditor() }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        outer.addView(topBar, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -316,9 +318,7 @@ class MainActivity : Activity() {
         content.addView(preview, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, (110 * dp).toInt()))
 
-        content.addView(inputRow("船只代号", ShipStore.draft.code, "点击输入", false, 24) {
-            ShipStore.draft.code = it
-        }, fieldParams(dp))
+        content.addView(codeRow(), fieldParams(dp))
         content.addView(inputRow("最高速度", ShipStore.draft.maxSpeed, "点击输入", true, 8, "knot") {
             ShipStore.draft.maxSpeed = it
         }, fieldParams(dp))
@@ -499,6 +499,64 @@ class MainActivity : Activity() {
         LinearLayout.LayoutParams.MATCH_PARENT,
         LinearLayout.LayoutParams.WRAP_CONTENT).apply {
         topMargin = (8 * dp).toInt()
+    }
+
+    /** 船只代号：可见的是自绘文字，实际接收输入的是 1×1 的隐藏 EditText，所以会弹出系统输入法但不显示系统输入框。 */
+    private fun codeRow(): View {
+        val dp = resources.displayMetrics.density
+        val hintColor = Color.parseColor("#9A9384")
+        val inkColor = Color.parseColor("#1F1F1F")
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(TextView(this).apply {
+            text = "船只代号："
+            textSize = 16f
+            typeface = pixelFont
+            includeFontPadding = false
+            setTextColor(Color.parseColor("#2B2B2B"))
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val display = TextView(this).apply {
+            text = ShipStore.draft.code.ifEmpty { "点击输入" }
+            textSize = 16f
+            typeface = pixelFont
+            includeFontPadding = false
+            setTextColor(if (ShipStore.draft.code.isEmpty()) hintColor else inkColor)
+            isClickable = true
+        }
+
+        val input = EditText(this).apply {
+            setText(ShipStore.draft.code)
+            setSelection(text.length)
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT
+            alpha = 0f
+            setBackgroundColor(Color.TRANSPARENT)
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    val value = s?.toString() ?: ""
+                    ShipStore.draft.code = value
+                    display.text = if (value.isEmpty()) "点击输入" else value
+                    display.setTextColor(if (value.isEmpty()) hintColor else inkColor)
+                }
+            })
+        }
+
+        display.setOnClickListener {
+            input.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
+
+        row.addView(display, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
+        return underlined(row)
     }
 
     private fun inputRow(
@@ -1007,10 +1065,12 @@ class MainActivity : Activity() {
         private val FOLDER_PATTERN = arrayOf(
             "  XXXX      ",
             " XXXXXX     ",
-            "XXXXXXXXXX  ",
-            "X        X  ",
-            "X        X  ",
-            "XXXXXXXXXX  "
+            "XXXXXXXXXXXX",
+            "X          X",
+            "X          X",
+            "X          X",
+            "X          X",
+            "XXXXXXXXXXXX"
         )
 
         // 添加（加号）
@@ -1018,8 +1078,11 @@ class MainActivity : Activity() {
             "     XX     ",
             "     XX     ",
             "     XX     ",
+            "     XX     ",
             "  XXXXXXXX  ",
             "  XXXXXXXX  ",
+            "     XX     ",
+            "     XX     ",
             "     XX     ",
             "     XX     "
         )
