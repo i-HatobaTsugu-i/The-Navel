@@ -9,14 +9,16 @@ import android.graphics.Rect
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
- * 海面背景：蓝底 + 白色碎沫。整片按 2dp 一格渲染到位图再最近邻放大，因此像素颗粒清晰。
- * 三个方向的涌浪叠加出等高线状的泡沫骨架，再按密度用哈希撒点，得到碎沫而不是整块白。
+ * 海面背景：深蓝水面 + 稀疏的白色碎沫团。
+ * 泡沫用两套不同尺度/流速的值噪声 fBm 合成——没有正弦叠加的周期性，
+ * 再按密度用混淆哈希撒点，边缘才是碎的而不是整块白。
+ * 整片按 2dp 一格渲染到位图后最近邻放大，像素颗粒清晰；8fps 足够表现海浪。
  */
 class OceanView @JvmOverloads constructor(
     context: Context,
@@ -34,37 +36,12 @@ class OceanView @JvmOverloads constructor(
     private var startAt = 0L
     private var lastFrameAt = 0L
 
-    private var colA = FloatArray(0)
-    private var colB = FloatArray(0)
-    private var colC = FloatArray(0)
-    private var colM = FloatArray(0)
-    private var rowA = FloatArray(0)
-    private var rowB = FloatArray(0)
-    private var rowC = FloatArray(0)
-    private var rowM = FloatArray(0)
-    private var caA = FloatArray(0)
-    private var caB = FloatArray(0)
-    private var caC = FloatArray(0)
-    private var caM = FloatArray(0)
-    private var raA = FloatArray(0)
-    private var raB = FloatArray(0)
-    private var raC = FloatArray(0)
-    private var raM = FloatArray(0)
-
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         cols = max(1, w / cellPx)
         rows = max(1, h / cellPx)
         bitmap?.recycle()
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
-        colA = FloatArray(cols); caA = FloatArray(cols)
-        colB = FloatArray(cols); caB = FloatArray(cols)
-        colC = FloatArray(cols); caC = FloatArray(cols)
-        colM = FloatArray(cols); caM = FloatArray(cols)
-        rowA = FloatArray(rows); raA = FloatArray(rows)
-        rowB = FloatArray(rows); raB = FloatArray(rows)
-        rowC = FloatArray(rows); raC = FloatArray(rows)
-        rowM = FloatArray(rows); raM = FloatArray(rows)
         startAt = SystemClock.uptimeMillis()
         lastFrameAt = 0L
     }
@@ -84,50 +61,77 @@ class OceanView @JvmOverloads constructor(
     }
 
     private fun render(t: Float) {
-        val stamp = (t * 6).toInt()
-        // 预计算每一列/每一行的 sin、cos，逐格只做乘加
-        prepare(colA, caA, 0.080f, 0.90f * t)
-        prepare(rowA, raA, 0.030f, 0f)
-        prepare(colB, caB, -0.050f, -0.70f * t + 1.7f)
-        prepare(rowB, raB, 0.110f, 0f)
-        prepare(colC, caC, 0.170f, 1.70f * t + 3.1f)
-        prepare(rowC, raC, -0.090f, 0f)
-        prepare(colM, caM, 0.021f, 0.25f * t + 1.0f)
-        prepare(rowM, raM, 0.028f, 0f)
-
+        val stamp = (t * 5).toInt()
         var index = 0
         for (j in 0 until rows) {
             val depth = j.toFloat() / max(rows - 1, 1)
-            val base = lerpColor(SHALLOW, DEEP, depth.pow(0.75f))
-            val rA = rowA[j]; val rB = rowB[j]; val rC = rowC[j]; val rM = rowM[j]
-            val rAa = raA[j]; val rBa = raB[j]; val rCa = raC[j]; val rMa = raM[j]
+            val base = lerpColor(SHALLOW, DEEP, depth.pow(0.7f))
+            val py = j * 0.045f + t * 0.05f
+            val ty = j * 0.120f + t * 0.18f
             for (i in 0 until cols) {
-                val a = colA[i] * rA + caA[i] * rAa
-                val b = colB[i] * rB + caB[i] * rBa
-                val c = colC[i] * rC + caC[i] * rCa
-                val m = colM[i] * rM + caM[i] * rMa
+                val patch = fbm(i * 0.055f - t * 0.22f, py, 1)
+                val tex = fbm(i * 0.130f - t * 0.5f, ty, 72)
 
-                val s = a + 0.55f * b + 0.30f * c
-                val g = abs(s)
-                val shine = 1f + 0.13f * s
-                val density = max(0f, (0.38f - g) / 0.38f) * (0.15f + 0.85f * (0.5f + 0.5f * m))
+                val shade = 0.84f + 0.30f * patch
+                val water = shaded(base, shade)
+
+                val mask = smoothStep(0.48f, 0.68f, patch)
+                val f = 0.55f * patch + 0.45f * tex
+                val density = max(0f, (f - 0.50f) / 0.20f) * mask
 
                 val r = hash01(i, j, stamp)
                 pixels[index++] = when {
-                    r < density * 0.55f -> FOAM
-                    r < density * 1.15f -> blend(shaded(base, shine), FOAM_DIM, 0.7f)
-                    else -> shaded(base, shine)
+                    r < density * 0.65f -> FOAM
+                    r < density * 1.05f -> blend(water, FOAM_DIM, 0.6f)
+                    else -> water
                 }
             }
         }
     }
 
-    private fun prepare(sinArr: FloatArray, cosArr: FloatArray, k: Float, phase: Float) {
-        for (i in sinArr.indices) {
-            val v = k * i + phase
-            sinArr[i] = sin(v)
-            cosArr[i] = kotlin.math.cos(v)
+    private fun hash01(ix: Int, iy: Int, s: Int): Float {
+        var v = (ix * 73856093) xor (iy * 19349663) xor (s * 83492791)
+        v = v xor (v ushr 16)
+        v *= 0x7FEB352D
+        v = v xor (v ushr 15)
+        v *= 0x846CA68B.toInt()
+        v = v xor (v ushr 16)
+        return (v and 0xFFFF) / 65535f
+    }
+
+    private fun noise(x: Float, y: Float, seed: Int): Float {
+        val x0 = floor(x).toInt()
+        val y0 = floor(y).toInt()
+        val fx = x - x0
+        val fy = y - y0
+        val u = fx * fx * (3f - 2f * fx)
+        val v = fy * fy * (3f - 2f * fy)
+        val n00 = hash01(x0, y0, seed)
+        val n10 = hash01(x0 + 1, y0, seed)
+        val n01 = hash01(x0, y0 + 1, seed)
+        val n11 = hash01(x0 + 1, y0 + 1, seed)
+        val a = n00 + (n10 - n00) * u
+        val b = n01 + (n11 - n01) * u
+        return a + (b - a) * v
+    }
+
+    private fun fbm(x: Float, y: Float, seed: Int): Float {
+        var total = 0f
+        var amp = 1f
+        var freq = 1f
+        var norm = 0f
+        for (o in 0 until OCTAVES) {
+            total += amp * noise(x * freq, y * freq, seed + o * 31)
+            norm += amp
+            amp *= 0.5f
+            freq *= 2.03f
         }
+        return total / norm
+    }
+
+    private fun smoothStep(edge0: Float, edge1: Float, x: Float): Float {
+        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
     }
 
     private fun shaded(base: Int, factor: Float): Int = Color.rgb(
@@ -148,19 +152,12 @@ class OceanView @JvmOverloads constructor(
         (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).roundToInt().coerceIn(0, 255)
     )
 
-    private fun Float.pow(e: Float): Float = Math.pow(toDouble(), e.toDouble()).toFloat()
-
-    private fun hash01(i: Int, j: Int, s: Int): Float {
-        var v = (i * 73856093) xor (j * 19349663) xor (s * 83492791)
-        v = (v xor (v ushr 13)) * 1274126177
-        return (v and 0xFFFF) / 65535f
-    }
-
     companion object {
-        private const val FRAME_MS = 100L
-        private val DEEP = Color.parseColor("#071E30")
-        private val SHALLOW = Color.parseColor("#1A5778")
-        private val FOAM = Color.parseColor("#ECF5F8")
-        private val FOAM_DIM = Color.parseColor("#9FBFCF")
+        private const val FRAME_MS = 125L
+        private const val OCTAVES = 2
+        private val DEEP = Color.parseColor("#081A29")
+        private val SHALLOW = Color.parseColor("#17435C")
+        private val FOAM = Color.parseColor("#D2E2EA")
+        private val FOAM_DIM = Color.parseColor("#86A4B4")
     }
 }
