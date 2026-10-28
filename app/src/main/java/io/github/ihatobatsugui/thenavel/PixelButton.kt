@@ -18,6 +18,7 @@ import kotlin.math.sqrt
  * 铁板按钮：金色细边框 + 45° 斜纹内板 + 四角螺丝。
  * 内板按"中心鼓起、四周压暗"的径向明暗叠左上镜面高光，量化成少量级差以保持像素风。
  * 整块底色在尺寸变化时渲染进 Bitmap 缓存，onDraw 只贴图。
+ * 一格 = 1dp，所有边缘都落在整数像素上。
  */
 class PixelButton @JvmOverloads constructor(
     context: Context,
@@ -63,7 +64,7 @@ class PixelButton @JvmOverloads constructor(
         canvas.drawBitmap(bg, 0f, 0f, bitmapPaint)
         if (isPressed) {
             paint.color = PRESS_OVERLAY
-            val inset = (BORDER + 1) * unit
+            val inset = (BORDER + 2) * unit
             canvas.drawRect(inset.toFloat(), inset.toFloat(),
                 (width - inset).toFloat(), (height - inset).toFloat(), paint)
         }
@@ -74,6 +75,9 @@ class PixelButton @JvmOverloads constructor(
         val u = unit
         val cols = width / u
         val rows = height / u
+        if (cols <= 0 || rows <= 0) {
+            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        }
         val bmp = Bitmap.createBitmap(cols * u, rows * u, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
 
@@ -129,11 +133,12 @@ class PixelButton @JvmOverloads constructor(
     }
 
     private fun drawRivets(c: Canvas, cols: Int, rows: Int) {
+        val margin = BORDER + 4
         val offsets = listOf(
-            BORDER + 2 to BORDER + 2,
-            cols - BORDER - 2 - RIVET to BORDER + 2,
-            BORDER + 2 to rows - BORDER - 2 - RIVET,
-            cols - BORDER - 2 - RIVET to rows - BORDER - 2 - RIVET
+            margin to margin,
+            cols - margin - RIVET to margin,
+            margin to rows - margin - RIVET,
+            cols - margin - RIVET to rows - margin - RIVET
         )
         for ((ox, oy) in offsets) {
             for (y in 0 until RIVET) {
@@ -154,11 +159,11 @@ class PixelButton @JvmOverloads constructor(
     }
 
     companion object {
-        private const val GRID_DP = 2f
-        private const val MIN_ROWS = 32
-        private const val BORDER = 2
-        private const val STRIPE = 4
-        private const val RIVET = 4
+        private const val GRID_DP = 1f
+        private const val MIN_ROWS = 64
+        private const val BORDER = 4
+        private const val STRIPE = 8
+        private const val RIVET = 8
         private const val PRESS_OVERLAY = 0x33000000
 
         private val GOLD_LIGHT = Color.parseColor("#F2CD78")
@@ -167,17 +172,21 @@ class PixelButton @JvmOverloads constructor(
         private val PLATE_LIGHT = Color.parseColor("#9AA1AC")
         private val PLATE_DARK = Color.parseColor("#7C828E")
 
-        private val RIVET_RING = Color.parseColor("#4A4F58")
-        private val RIVET_HI = Color.parseColor("#D6DAE0")
-        private val RIVET_MID = Color.parseColor("#9AA0A9")
-        private val RIVET_DARK = Color.parseColor("#6F757E")
+        private val RING = Color.parseColor("#4A4F58")
+        private val HI = Color.parseColor("#D6DAE0")
+        private val MID = Color.parseColor("#9AA0A9")
+        private val DARK = Color.parseColor("#6F757E")
 
-        // 4×4 格的圆头螺丝：左上高光、右下压暗
+        // 8×8 格圆头螺丝：左上高光、右下压暗
         private val RIVET_PATTERN = arrayOf(
-            intArrayOf(Color.TRANSPARENT, RIVET_RING, RIVET_RING, Color.TRANSPARENT),
-            intArrayOf(RIVET_RING, RIVET_HI, RIVET_MID, RIVET_RING),
-            intArrayOf(RIVET_RING, RIVET_MID, RIVET_DARK, RIVET_RING),
-            intArrayOf(Color.TRANSPARENT, RIVET_RING, RIVET_RING, Color.TRANSPARENT)
+            intArrayOf(0, 0, RING, RING, RING, RING, 0, 0),
+            intArrayOf(0, RING, HI, HI, HI, MID, RING, 0),
+            intArrayOf(RING, HI, HI, HI, MID, MID, MID, RING),
+            intArrayOf(RING, HI, HI, MID, MID, MID, DARK, RING),
+            intArrayOf(RING, HI, MID, MID, MID, DARK, DARK, RING),
+            intArrayOf(RING, MID, MID, MID, DARK, DARK, DARK, RING),
+            intArrayOf(0, RING, MID, DARK, DARK, DARK, RING, 0),
+            intArrayOf(0, 0, RING, RING, RING, RING, 0, 0)
         )
     }
 }
