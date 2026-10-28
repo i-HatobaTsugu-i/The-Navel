@@ -286,11 +286,10 @@ class MainActivity : Activity() {
         }
 
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        listOf("编辑船只", "编辑战役", "返回").forEachIndexed { index, label ->
+        listOf("编辑船只", "编辑战役").forEachIndexed { index, label ->
             val button = menuButton(label).apply {
                 when (label) {
                     "编辑船只" -> setOnClickListener { showShipEditor() }
-                    "返回" -> setOnClickListener { showMenu() }
                 }
             }
             column.addView(button, LinearLayout.LayoutParams(
@@ -374,6 +373,7 @@ class MainActivity : Activity() {
             text = "$label："
             textSize = 16f
             typeface = pixelFont
+            includeFontPadding = false
             setTextColor(Color.parseColor("#2B2B2B"))
         }
         val value = EditText(this).apply {
@@ -382,6 +382,8 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#1F1F1F"))
             setBackgroundColor(Color.TRANSPARENT)
             setPadding(0, 0, 0, 0)
+            includeFontPadding = false
+            minHeight = 0
             isSingleLine = true
             this.inputType = inputType
         }
@@ -392,7 +394,7 @@ class MainActivity : Activity() {
 
         val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         container.addView(row, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (LINE_HEIGHT_DP * dp).toInt()))
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         container.addView(View(this).apply { setBackgroundColor(RULE_COLOR) },
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, (1 * dp).toInt().coerceAtLeast(1)))
@@ -446,7 +448,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val SCRIM = 0x59000000
-        private const val LINE_HEIGHT_DP = 40f
         private val RULE_COLOR = Color.parseColor("#9DB7D8")
     }
 }
