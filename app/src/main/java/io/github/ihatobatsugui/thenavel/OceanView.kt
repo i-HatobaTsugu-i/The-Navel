@@ -15,10 +15,9 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * 海面背景：蓝底 + 零散的白色碎沫。
- * 泡沫由两层噪声（大块掩码 + 细纹理）算出的密度直接撒点，因此是"一点一点"的碎沫；
- * 再保留一帧记忆做淡出，源移走后原地只会变淡，不会重新长出来。
- * 2dp 一格渲染到位图后最近邻放大；15fps。
+ * 海面背景：蓝底 + 零散的白色碎沫，60Hz 刷新。
+ * 泡沫由两层噪声算出的密度直接撒点（"一点一点"的碎沫），保留一帧淡出记忆，源移走后原地只变淡不重生。
+ * 噪声在半分辨率网格上求值、逐格双线性采样，把每帧计算量降到 1/4，才跑得起 60fps。
  */
 class OceanView @JvmOverloads constructor(
     context: Context,
@@ -32,6 +31,10 @@ class OceanView @JvmOverloads constructor(
     private var bitmap: Bitmap? = null
     private var pixels = IntArray(0)
     private var foam = FloatArray(0)
+    private var patchGrid = FloatArray(0)
+    private var texGrid = FloatArray(0)
+    private var gridCols = 0
+    private var gridRows = 0
     private var frameIndex = 0
     private var cols = 0
     private var rows = 0
@@ -45,6 +48,10 @@ class OceanView @JvmOverloads constructor(
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
         foam = FloatArray(cols * rows)
+        gridCols = cols / GRID_STEP + 2
+        gridRows = rows / GRID_STEP + 2
+        patchGrid = FloatArray(gridCols * gridRows)
+        texGrid = FloatArray(gridCols * gridRows)
         frameIndex = 0
         startAt = SystemClock.uptimeMillis()
         lastFrameAt = 0L
@@ -66,14 +73,22 @@ class OceanView @JvmOverloads constructor(
 
     private fun render(t: Float) {
         val stamp = (t * 5).toInt()
+        updateGrids(t)
+
         var index = 0
         for (j in 0 until rows) {
             val depth = j.toFloat() / max(rows - 1, 1)
             val water = lerpColor(SHALLOW, DEEP, depth.pow(0.8f))
-            val texY = j * 0.120f + t * 0.18f
+            val gy = j.toFloat() / GRID_STEP
+            val gy0 = gy.toInt()
+            val fy = gy - gy0
             for (i in 0 until cols) {
-                val patch = fbm(i * 0.055f - t * 0.22f, j * 0.045f + t * 0.05f, 1)
-                val tex = fbm(i * 0.130f - t * 0.5f, texY, 72)
+                val gx = i.toFloat() / GRID_STEP
+                val gx0 = gx.toInt()
+                val fx = gx - gx0
+                val patch = sampleGrid(patchGrid, gx0, gy0, fx, fy)
+                val tex = sampleGrid(texGrid, gx0, gy0, fx, fy)
+
                 val mask = smoothStep(0.48f, 0.68f, patch)
                 val f = 0.55f * patch + 0.45f * tex
                 val source = max(0f, (f - 0.54f) / 0.20f) * mask
@@ -95,6 +110,30 @@ class OceanView @JvmOverloads constructor(
             }
         }
         frameIndex++
+    }
+
+    // 噪声在半分辨率网格上求值
+    private fun updateGrids(t: Float) {
+        var gi = 0
+        for (gj in 0 until gridRows) {
+            val cy = gj * GRID_STEP
+            for (gx in 0 until gridCols) {
+                val cx = gx * GRID_STEP
+                patchGrid[gi] = fbm(cx * 0.055f - t * 0.22f, cy * 0.045f + t * 0.05f, 1)
+                texGrid[gi] = fbm(cx * 0.130f - t * 0.5f, cy * 0.120f + t * 0.18f, 72)
+                gi++
+            }
+        }
+    }
+
+    private fun sampleGrid(grid: FloatArray, x0: Int, y0: Int, fx: Float, fy: Float): Float {
+        val i00 = y0 * gridCols + x0
+        val i10 = i00 + 1
+        val i01 = i00 + gridCols
+        val i11 = i01 + 1
+        val top = grid[i00] + (grid[i10] - grid[i00]) * fx
+        val bottom = grid[i01] + (grid[i11] - grid[i01]) * fx
+        return top + (bottom - top) * fy
     }
 
     private fun hash01(ix: Int, iy: Int, s: Int): Float {
@@ -155,9 +194,11 @@ class OceanView @JvmOverloads constructor(
     )
 
     companion object {
-        private const val FRAME_MS = 66L
+        private const val FRAME_MS = 16L
+        private const val GRID_STEP = 2
         private const val OCTAVES = 2
-        private const val DECAY = 0.85f
+        // 60fps 下按 ~0.55s 的时间常数换算出的每帧衰减
+        private const val DECAY = 0.97f
         private const val SEED_RATE = 0.004f
         private val SHALLOW = Color.parseColor("#2F7396")
         private val DEEP = Color.parseColor("#0F2C40")
