@@ -281,22 +281,10 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val newShip = PixelIconView(this).apply {
-            pattern = ADD_PATTERN
-            palette = mapOf('X' to ICON_INK)
-            cellScale = ICON_SCALE
-            onTap = { confirmNewShip() }
-        }
-        val load = PixelIconView(this).apply {
-            pattern = FOLDER_PATTERN
-            palette = mapOf('X' to ICON_GOLD)
-            cellScale = ICON_SCALE
-            onTap = { showLoadShips() }
-        }
-        topBar.addView(newShip, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        topBar.addView(load, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        topBar.addView(iconView(R.drawable.ic_plus) { confirmNewShip() },
+            LinearLayout.LayoutParams((32 * dp).toInt(), (32 * dp).toInt()))
+        topBar.addView(iconView(R.drawable.ic_folder) { showLoadShips() },
+            LinearLayout.LayoutParams((32 * dp).toInt(), (32 * dp).toInt()).apply {
             marginStart = (12 * dp).toInt()
         })
         topBar.addView(TextView(this).apply {
@@ -774,27 +762,16 @@ class MainActivity : Activity() {
         })
 
         // 导入图片
-        row.addView(PixelIconView(this).apply {
-            pattern = IMPORT_PATTERN
-            palette = mapOf('X' to ICON_INK)
-            cellScale = ICON_SCALE
-            onTap = { pickImage(index) }
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = (6 * dp).toInt()
-        })
+        row.addView(iconView(R.drawable.ic_download) { pickImage(index) },
+            LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()).apply {
+                marginStart = (6 * dp).toInt()
+            })
 
         // 删除
-        row.addView(PixelIconView(this).apply {
-            pattern = TRASH_PATTERN
-            palette = TRASH_PALETTE
-            cellScale = ICON_SCALE
-            onTap = {
-                ShipStore.draft.layers.removeAt(index)
-                refreshLayers()
-            }
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        row.addView(iconView(R.drawable.ic_trash) {
+            ShipStore.draft.layers.removeAt(index)
+            refreshLayers()
+        }, LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()).apply {
             marginStart = (6 * dp).toInt()
         })
 
@@ -948,16 +925,10 @@ class MainActivity : Activity() {
             marginStart = (10 * dp).toInt()
         })
 
-        row.addView(PixelIconView(this).apply {
-            pattern = TRASH_PATTERN
-            palette = TRASH_PALETTE
-            cellScale = ICON_SCALE
-            onTap = {
-                ShipStore.delete(ship)
-                showLoadShips()
-            }
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(iconView(R.drawable.ic_trash) {
+            ShipStore.delete(ship)
+            showLoadShips()
+        }, LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()))
         return row
     }
 
@@ -990,6 +961,13 @@ class MainActivity : Activity() {
         typeface = pixelFont
         includeFontPadding = false
         setTextColor(Color.parseColor("#1F5FA8"))
+        isClickable = true
+        setOnClickListener { tap() }
+    }
+
+    private fun iconView(resId: Int, tap: () -> Unit): ImageView = ImageView(this).apply {
+        setImageResource(resId)
+        scaleType = ImageView.ScaleType.FIT_CENTER
         isClickable = true
         setOnClickListener { tap() }
     }
@@ -1041,65 +1019,7 @@ class MainActivity : Activity() {
     companion object {
         private const val SCRIM = 0x59000000
         private const val REQUEST_LAYER_IMAGE = 1001
-        private const val ICON_SCALE = 2
         private val RULE_COLOR = Color.parseColor("#9DB7D8")
-        private val ICON_INK = Color.parseColor("#1B1F24")
-        private val ICON_GOLD = Color.parseColor("#D9A441")
-        private val TRASH_PALETTE = mapOf('X' to Color.parseColor("#C0392B"))
-
-        // 导入（下载箭头 + 托盘）
-        private val IMPORT_PATTERN = arrayOf(
-            "     XX     ",
-            "     XX     ",
-            "     XX     ",
-            "   XXXXXX   ",
-            "    XXXX    ",
-            "     XX     ",
-            "            ",
-            " X        X ",
-            " X        X ",
-            " XXXXXXXXXX "
-        )
-
-        // 读取文件（文件夹）
-        private val FOLDER_PATTERN = arrayOf(
-            "  XXXX      ",
-            " XXXXXX     ",
-            "XXXXXXXXXXXX",
-            "X          X",
-            "X          X",
-            "X          X",
-            "X          X",
-            "XXXXXXXXXXXX"
-        )
-
-        // 添加（加号）
-        private val ADD_PATTERN = arrayOf(
-            "     XX     ",
-            "     XX     ",
-            "     XX     ",
-            "     XX     ",
-            "  XXXXXXXX  ",
-            "  XXXXXXXX  ",
-            "     XX     ",
-            "     XX     ",
-            "     XX     ",
-            "     XX     "
-        )
-
-        // 删除（垃圾桶）
-        private val TRASH_PATTERN = arrayOf(
-            "   XXXX   ",
-            "  XXXXXX  ",
-            " XXXXXXXX ",
-            "  XXXXXX  ",
-            "  X XX XX ",
-            "  X XX XX ",
-            "  X XX XX ",
-            "  X XX XX ",
-            "  X XX XX ",
-            "  XXXXXX  ",
-            "   XXXX   "
-        )
     }
+
 }
