@@ -7,10 +7,12 @@ import android.content.Context
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -331,25 +333,22 @@ class MainActivity : Activity() {
             isClickable = true
         }
 
-        val title = TextView(this).apply {
-            text = "船只编辑器"
-            textSize = 24f
-            typeface = pixelFont
-            setTextColor(Color.parseColor("#2B2B2B"))
-        }
-        val hint = TextView(this).apply {
-            text = "画布与零件库待接入"
-            textSize = 16f
-            typeface = pixelFont
-            setTextColor(Color.parseColor("#5A5A5A"))
-        }
-
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(title, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(hint, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        }
+
+        // 顶部留白：船只展示区，不画横线，占满剩余高度
+        column.addView(View(this), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        listOf(
+            "船只代号" to InputType.TYPE_CLASS_TEXT,
+            "最高速度" to (InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL),
+            "可使用时期" to InputType.TYPE_CLASS_TEXT
+        ).forEach { (label, type) ->
+            column.addView(fieldRow(label, type), LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (10 * dp).toInt()
             })
         }
@@ -362,6 +361,42 @@ class MainActivity : Activity() {
 
         setContentView(root)
         hideSystemBars()
+    }
+
+    // 表单行：标签 + 输入框，下方一条蓝色横线
+    private fun fieldRow(label: String, inputType: Int): View {
+        val dp = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val name = TextView(this).apply {
+            text = "$label："
+            textSize = 16f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+        }
+        val value = EditText(this).apply {
+            textSize = 16f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#1F1F1F"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(0, 0, 0, 0)
+            isSingleLine = true
+            this.inputType = inputType
+        }
+        row.addView(name, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(value, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        container.addView(row, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (LINE_HEIGHT_DP * dp).toInt()))
+        container.addView(View(this).apply { setBackgroundColor(RULE_COLOR) },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (1 * dp).toInt().coerceAtLeast(1)))
+        return container
     }
 
     private fun menuButton(label: String): PixelButton = PixelButton(this).apply {
@@ -411,5 +446,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val SCRIM = 0x59000000
+        private const val LINE_HEIGHT_DP = 40f
+        private val RULE_COLOR = Color.parseColor("#9DB7D8")
     }
 }

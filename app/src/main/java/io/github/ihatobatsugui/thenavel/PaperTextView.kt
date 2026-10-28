@@ -37,12 +37,14 @@ class PaperTextView @JvmOverloads constructor(
         if (lh > 0) {
             val half = rulePaint.strokeWidth / 2f
             val marginX = paddingLeft / 2f
-            var y = paddingTop + lh
-            while (y < height - paddingBottom) {
-                // 对齐到整像素中心，避免 1px 线被拆到两行而变淡
+            // 按行数画到底：包打最后一行，不能因 padding 而漏掉它下面的线
+            val available = height - paddingTop - paddingBottom
+            val lines = maxOf(1, Math.round(available / lh.toFloat()))
+            for (k in 1..lines) {
+                val y = paddingTop + k * lh
+                if (y > height) break
                 val lineY = (y - half).toInt() + half
                 canvas.drawLine(0f, lineY, width.toFloat(), lineY, rulePaint)
-                y += lh
             }
             canvas.drawLine(marginX, 0f, marginX, height.toFloat(), marginPaint)
         }
