@@ -35,18 +35,25 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(Color.parseColor("#10141A"))
+            setPadding(0, 0, 0, (16 * dp).toInt())
         }
 
-        val title = TextView(this).apply {
+        val title = PixelTitle(this).apply {
             text = "The Navel"
-            textSize = 32f
+            textSize = 48f
             typeface = titleFont
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#E8E4D8"))
-            setPadding(0, (24 * dp).toInt(), 0, (16 * dp).toInt())
+            setTextColor(Color.parseColor("#F2EAD3"))
+            extrusionColor = Color.parseColor("#6E5A33")
+            depth = 4
+            setPadding(0, (24 * dp).toInt(), 0, 0)
         }
         root.addView(title, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // 弹性空隔，把控件压到底部
+        root.addView(View(this), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val menu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

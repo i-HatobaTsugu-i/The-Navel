@@ -18,13 +18,13 @@ class PaperTextView @JvmOverloads constructor(
 
     private val rulePaint = Paint().apply {
         isAntiAlias = false
-        color = Color.parseColor("#C3D2E4")
-        strokeWidth = 1f
+        color = Color.parseColor("#B4C6DE")
+        strokeWidth = context.resources.displayMetrics.density.coerceAtLeast(1f)
     }
     private val marginPaint = Paint().apply {
         isAntiAlias = false
-        color = Color.parseColor("#E0A8A8")
-        strokeWidth = 1f
+        color = Color.parseColor("#D98F8F")
+        strokeWidth = context.resources.displayMetrics.density.coerceAtLeast(1f)
     }
 
     init {
@@ -35,13 +35,16 @@ class PaperTextView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val lh = lineHeight
         if (lh > 0) {
-            val marginX = paddingLeft / 2
+            val half = rulePaint.strokeWidth / 2f
+            val marginX = paddingLeft / 2f
             var y = paddingTop + lh
             while (y < height - paddingBottom) {
-                canvas.drawLine(0f, y.toFloat(), width.toFloat(), y.toFloat(), rulePaint)
+                // 对齐到整像素中心，避免 1px 线被拆到两行而变淡
+                val lineY = (y - half).toInt() + half
+                canvas.drawLine(0f, lineY, width.toFloat(), lineY, rulePaint)
                 y += lh
             }
-            canvas.drawLine(marginX.toFloat(), 0f, marginX.toFloat(), height.toFloat(), marginPaint)
+            canvas.drawLine(marginX, 0f, marginX, height.toFloat(), marginPaint)
         }
         super.onDraw(canvas)
     }
