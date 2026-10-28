@@ -11,31 +11,19 @@ import android.util.AttributeSet
 import android.view.View
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * 海面背景：蓝底 + 白色泡沫簇。
- * 泡沫不是一个每帧刷新的场，而是若干个有"寿命"的簇：出生 → 逐渐变浓 → 淡出消失，泡沫只是簇浓度的表现。
- * 因此整片泡沫会自然生灭、位置漂移；颜色按浓度与水面混色，过渡连续（不是开关式闪烁）。
- * 每帧只遍历各簇的包围盒，渲染 2dp 一格后最近邻放大，20fps。
+ * 海面背景：蓝底 + 零散的白色碎沫。
+ * 泡沫由两层噪声（大块掩码 + 细纹理）算出的密度直接撒点，因此是"一点一点"的碎沫；
+ * 再保留一帧记忆做淡出，源移走后原地只会变淡，不会重新长出来。
+ * 2dp 一格渲染到位图后最近邻放大；15fps。
  */
 class OceanView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
-
-    private class Cluster {
-        var x = 0f
-        var y = 0f
-        var radius = 0f
-        var age = 0f
-        var life = 1f
-        var vx = 0f
-        var vy = 0f
-        var seed = 0
-    }
 
     private val cellPx = (2f * resources.displayMetrics.density).roundToInt().coerceAtLeast(2)
     private val paint = Paint().apply { isFilterBitmap = false }
@@ -43,14 +31,11 @@ class OceanView @JvmOverloads constructor(
 
     private var bitmap: Bitmap? = null
     private var pixels = IntArray(0)
-    private var alpha = FloatArray(0)
-    private var detail = FloatArray(0)
-    private var water = IntArray(0)
-    private val clusters = ArrayList<Cluster>()
-    private var spawnCount = 0
-
+    private var foam = FloatArray(0)
+    private var frameIndex = 0
     private var cols = 0
     private var rows = 0
+    private var startAt = 0L
     private var lastFrameAt = 0L
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -59,47 +44,17 @@ class OceanView @JvmOverloads constructor(
         bitmap?.recycle()
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
-        alpha = FloatArray(cols * rows)
-        detail = FloatArray(cols * rows)
-        water = IntArray(cols * rows)
-
-        var index = 0
-        for (j in 0 until rows) {
-            val depth = j.toFloat() / max(rows - 1, 1)
-            val base = lerpColor(SHALLOW, DEEP, depth.pow(0.8f))
-            for (i in 0 until cols) {
-                detail[index] = fbm(i * 0.16f, j * 0.16f, 21)
-                water[index] = base
-                index++
-            }
-        }
-
-        clusters.clear()
-        spawnCount = 0
-        repeat(CLUSTER_COUNT) { spawnCluster(it * 0.9f) }
+        foam = FloatArray(cols * rows)
+        frameIndex = 0
+        startAt = SystemClock.uptimeMillis()
         lastFrameAt = 0L
-    }
-
-    private fun spawnCluster(ageOffset: Float) {
-        val s = spawnCount++
-        val c = Cluster()
-        c.x = hash01(s, 7, 11) * cols
-        c.y = hash01(s, 13, 17) * rows
-        c.radius = 14f + hash01(s, 19, 23) * 10f
-        c.life = 4.5f + hash01(s, 29, 31) * 3.5f
-        c.age = (hash01(s, 37, 41) * c.life + ageOffset) % c.life
-        c.vx = (hash01(s, 43, 47) - 0.5f) * 4f
-        c.vy = (hash01(s, 53, 59) - 0.5f) * 1.2f
-        c.seed = s
-        clusters.add(c)
     }
 
     override fun onDraw(canvas: Canvas) {
         val now = SystemClock.uptimeMillis()
-        val dt = if (lastFrameAt == 0L) 0f else (now - lastFrameAt) / 1000f
         if (lastFrameAt == 0L || now - lastFrameAt >= FRAME_MS) {
             lastFrameAt = now
-            render(dt.coerceIn(0f, 0.2f))
+            render((now - startAt) / 1000f)
             bitmap?.setPixels(pixels, 0, cols, 0, 0, cols, rows)
         }
         bitmap?.let {
@@ -109,84 +64,37 @@ class OceanView @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
-    private fun render(dt: Float) {
-        java.util.Arrays.fill(alpha, 0f)
-
-        for (c in clusters) {
-            c.age += dt
-            if (c.age >= c.life) {
-                // 这一簇“寿终”，在原地附近重新投生一个新的
-                val diedX = c.x
-                val diedY = c.y
-                val fresh = Cluster()
-                val s = spawnCount++
-                fresh.x = diedX + (hash01(s, 61, 67) - 0.5f) * 30f
-                fresh.y = diedY + (hash01(s, 71, 73) - 0.5f) * 20f
-                fresh.radius = 14f + hash01(s, 19, 23) * 10f
-                fresh.life = 4.5f + hash01(s, 29, 31) * 3.5f
-                fresh.age = 0f
-                fresh.vx = (hash01(s, 43, 47) - 0.5f) * 4f
-                fresh.vy = (hash01(s, 53, 59) - 0.5f) * 1.2f
-                fresh.seed = s
-                c.x = fresh.x
-                c.y = fresh.y
-                c.radius = fresh.radius
-                c.life = fresh.life
-                c.age = 0f
-                c.vx = fresh.vx
-                c.vy = fresh.vy
-                c.seed = fresh.seed
-            }
-
-            c.x += c.vx * dt
-            c.y += c.vy * dt
-            if (c.x < 0f) c.x += cols
-            if (c.x >= cols) c.x -= cols
-            c.y = c.y.coerceIn(0f, (rows - 1).toFloat())
-
-            val t = c.age / c.life
-            val env = smoothStep(0f, 0.22f, t) * (1f - smoothStep(0.62f, 1f, t))
-            if (env <= 0.01f) continue
-
-            val rx = c.radius * 1.45f
-            val ry = c.radius * 0.85f
-            val j0 = max(0, (c.y - ry).toInt())
-            val j1 = min(rows - 1, (c.y + ry).toInt() + 1)
-            for (j in j0..j1) {
-                val dy = (j - c.y) / ry
-                val base = j * cols
-                val i0 = max(0, (c.x - rx).toInt())
-                val i1 = min(cols - 1, (c.x + rx).toInt() + 1)
-                for (i in i0..i1) {
-                    val dx = (i - c.x) / rx
-                    val idx = base + i
-                    val shape = 1f - dx * dx - dy * dy + 0.55f * (detail[idx] - 0.5f)
-                    if (shape > 0f) {
-                        val v = env * shape.pow(1.1f)
-                        if (v > alpha[idx]) alpha[idx] = v
-                    }
-                }
-            }
-        }
-
+    private fun render(t: Float) {
+        val stamp = (t * 5).toInt()
         var index = 0
         for (j in 0 until rows) {
+            val depth = j.toFloat() / max(rows - 1, 1)
+            val water = lerpColor(SHALLOW, DEEP, depth.pow(0.8f))
+            val texY = j * 0.120f + t * 0.18f
             for (i in 0 until cols) {
-                val a = (alpha[index] * 8f).roundToInt() / 8f
-                pixels[index] = if (a <= 0f) {
-                    water[index]
+                val patch = fbm(i * 0.055f - t * 0.22f, j * 0.045f + t * 0.05f, 1)
+                val tex = fbm(i * 0.130f - t * 0.5f, texY, 72)
+                val mask = smoothStep(0.48f, 0.68f, patch)
+                val f = 0.55f * patch + 0.45f * tex
+                val source = max(0f, (f - 0.54f) / 0.20f) * mask
+
+                val previous = if (frameIndex == 0) {
+                    if (hash01(i, j, 4242) < SEED_RATE) 0.9f else 0f
                 } else {
-                    val p = smoothStep(0.44f, 0.72f, detail[index] * 0.85f + a * 0.40f)
-                    blend(water[index], FOAM, min(1f, p * a * 1.6f))
+                    foam[index]
                 }
-                index++
+                val value = max(source, previous * DECAY)
+                foam[index] = value
+
+                val r = hash01(i, j, stamp)
+                pixels[index++] = when {
+                    r < value * 0.42f -> FOAM
+                    r < value * 0.80f -> blend(water, FOAM_DIM, 0.60f)
+                    else -> water
+                }
             }
         }
-    }
-
-    private fun smoothStep(edge0: Float, edge1: Float, x: Float): Float {
-        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
-        return t * t * (3f - 2f * t)
+        frameIndex++
     }
 
     private fun hash01(ix: Int, iy: Int, s: Int): Float {
@@ -229,6 +137,11 @@ class OceanView @JvmOverloads constructor(
         return total / norm
     }
 
+    private fun smoothStep(edge0: Float, edge1: Float, x: Float): Float {
+        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
+
     private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
         (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt().coerceIn(0, 255),
         (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt().coerceIn(0, 255),
@@ -242,11 +155,13 @@ class OceanView @JvmOverloads constructor(
     )
 
     companion object {
-        private const val FRAME_MS = 50L
+        private const val FRAME_MS = 66L
         private const val OCTAVES = 2
-        private const val CLUSTER_COUNT = 5
+        private const val DECAY = 0.85f
+        private const val SEED_RATE = 0.004f
         private val SHALLOW = Color.parseColor("#2F7396")
         private val DEEP = Color.parseColor("#0F2C40")
         private val FOAM = Color.parseColor("#E6F1F6")
+        private val FOAM_DIM = Color.parseColor("#9DBECE")
     }
 }
