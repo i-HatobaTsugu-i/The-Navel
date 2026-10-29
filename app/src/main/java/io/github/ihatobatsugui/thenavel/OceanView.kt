@@ -224,7 +224,7 @@ class OceanView @JvmOverloads constructor(
         private const val CURL = 0.08f
         private const val DIFFUSE = 0.003f
         private const val DECAY = 0.995f
-        private const val SOURCE_GAIN = 0.0015f
+        private const val SOURCE_GAIN = 0.0023f
         // 源区本身也随同一股风漂移，否则会在原地不断补泡沫、最终铺成均匀薄雾
         private const val CONV_MOVE_X = 1.30f
         private const val CONV_MOVE_Y = 0.24f
