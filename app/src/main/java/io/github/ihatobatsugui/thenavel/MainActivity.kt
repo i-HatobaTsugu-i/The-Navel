@@ -444,85 +444,110 @@ class MainActivity : Activity() {
     ) {
         val dp = resources.displayMetrics.density
         val dialog = Dialog(this)
-        val panelWidth = min(
-            (resources.displayMetrics.widthPixels - 40 * dp).toInt(),
-            (560 * dp).toInt()
+        val dialogWidth = min(
+            (resources.displayMetrics.widthPixels - 32 * dp).toInt(),
+            (620 * dp).toInt()
         )
-        val panel = paperPanel()
+
+        val machine = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#2F2F2F"))
+            setPadding((10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt())
+        }
+
+        // 压纸滚筒
+        machine.addView(View(this).apply { setBackgroundColor(Color.parseColor("#4A4A4A")) },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (10 * dp).toInt()))
+
+        machine.addView(TextView(this).apply {
+            text = title
+            textSize = 12f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#B9B2A2"))
+            setPadding(0, (6 * dp).toInt(), 0, (2 * dp).toInt())
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         var value = initial
         val display = TextView(this).apply {
             text = value
             textSize = 20f
             typeface = pixelFont
-            setTextColor(Color.parseColor("#1F1F1F"))
-            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+            setTextColor(INK)
+            setPadding((8 * dp).toInt(), (4 * dp).toInt(), (8 * dp).toInt(), (4 * dp).toInt())
         }
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        column.addView(TextView(this).apply {
-            text = title
-            textSize = 16f
-            typeface = pixelFont
-            setTextColor(Color.parseColor("#5A5A5A"))
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        column.addView(underlined(display), LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val paper = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#EFE8D6")) }
+        paper.addView(display, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        })
+        machine.addView(paper, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (46 * dp).toInt()).apply {
+            topMargin = (4 * dp).toInt()
+        })
 
         fun refresh() {
             display.text = value
+            // 落墨：新字先压暗、整体微弹一下，再回到常态墨色
+            display.scaleX = 1.03f
+            display.scaleY = 1.03f
+            display.setTextColor(INK_FRESH)
+            display.animate().scaleX(1f).scaleY(1f).setDuration(90).start()
+            display.postDelayed({ display.setTextColor(INK) }, 70)
         }
 
         fun addRow(chars: String) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             chars.forEach { c ->
-                val key = smallKey(c.toString()) {
-                    if (value.length < maxLen) {
-                        value += c
-                        refresh()
+                row.addView(RoundKeyView(this).apply {
+                    label = c.toString()
+                    onTap = {
+                        if (value.length < maxLen) {
+                            value += c
+                            refresh()
+                        }
                     }
-                }
-                row.addView(key, LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                }, LinearLayout.LayoutParams(0, (40 * dp).toInt(), 1f).apply {
                     marginStart = (3 * dp).toInt()
                 })
             }
-            column.addView(row, LinearLayout.LayoutParams(
+            machine.addView(row, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (4 * dp).toInt()
+            })
+        }
+
+        fun addActionRow(labels: List<String>, actions: List<() -> Unit>) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            labels.forEachIndexed { index, label ->
+                row.addView(RoundKeyView(this).apply {
+                    this.label = label
+                    onTap = actions[index]
+                }, LinearLayout.LayoutParams(0, (40 * dp).toInt(), 1f).apply {
+                    marginStart = (3 * dp).toInt()
+                })
+            }
+            machine.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (8 * dp).toInt()
             })
         }
 
         val rows = keyRows ?: listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM_-")
         rows.forEach { addRow(it) }
 
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(smallKey("退格") {
-            if (value.isNotEmpty()) {
-                value = value.dropLast(1)
-                refresh()
-            }
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        actions.addView(smallKey("取消") { dialog.dismiss() },
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = (4 * dp).toInt()
-            })
-        actions.addView(smallKey("确认") {
-            onDone(value)
-            dialog.dismiss()
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = (4 * dp).toInt()
-        })
-        column.addView(actions, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (8 * dp).toInt()
-        })
+        addActionRow(
+            listOf("退格", "取消", "确认"),
+            listOf(
+                { if (value.isNotEmpty()) { value = value.dropLast(1); refresh() } },
+                { dialog.dismiss() },
+                { onDone(value); dialog.dismiss() }
+            )
+        )
 
-        panel.addView(column, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        dialog.setContentView(panel)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setLayout(panelWidth, LinearLayout.LayoutParams.WRAP_CONTENT)
+        dialog.setContentView(machine)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#1A1A1A")))
+        dialog.window?.setLayout(dialogWidth, LinearLayout.LayoutParams.WRAP_CONTENT)
         dialog.show()
     }
 
@@ -1004,16 +1029,6 @@ class MainActivity : Activity() {
         setPadding(padH, padV, padH, padV)
     }
 
-    private fun smallKey(label: String, tap: () -> Unit): PixelButton = PixelButton(this).apply {
-        text = label
-        textSize = 14f
-        typeface = pixelFont
-        setTextColor(Color.parseColor("#16191F"))
-        val pad = (4 * resources.displayMetrics.density).toInt()
-        setPadding(pad, pad, pad, pad)
-        setOnClickListener { tap() }
-    }
-
     /** 纸张页面上的操作按钮：比正文大一号的蓝色文字 + "→" */
     private fun linkButton(label: String, tap: () -> Unit): TextView = TextView(this).apply {
         text = "$label →"
@@ -1080,6 +1095,8 @@ class MainActivity : Activity() {
         private const val SCRIM = 0x59000000
         private const val REQUEST_LAYER_IMAGE = 1001
         private val RULE_COLOR = Color.parseColor("#9DB7D8")
+        private val INK = Color.parseColor("#1F1F1F")
+        private val INK_FRESH = Color.parseColor("#6B4E22")
     }
 
 }
