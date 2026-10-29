@@ -1,5 +1,9 @@
 package io.github.ihatobatsugui.thenavel
 
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -51,11 +55,95 @@ data class Ship(
     )
 }
 
-/** 会话内的船只仓库：编辑中的草稿和已保存的船只都放在这里，退出界面后内容不丢。 */
+/**
+ * 船只仓库：数据落盘到 filesDir/ships.json，应用更新不会丢。
+ * 读取时对缺失字段全部给默认值，兼容旧版本写下的存档。
+ */
 object ShipStore {
+
+    private const val FILE_NAME = "ships.json"
+    private var context: Context? = null
 
     val ships = mutableListOf<Ship>()
     var draft: Ship = Ship()
+
+    fun init(ctx: Context) {
+        context = ctx.applicationContext
+        load()
+    }
+
+    private fun file(): File? = context?.let { File(it.filesDir, FILE_NAME) }
+
+    private fun load() {
+        val f = file() ?: return
+        if (!f.exists()) return
+        runCatching {
+            val root = JSONObject(f.readText())
+            val array = root.optJSONArray("ships") ?: JSONArray()
+            ships.clear()
+            for (i in 0 until array.length()) {
+                val o = array.optJSONObject(i) ?: continue
+                val layers = mutableListOf<ShipLayer>()
+                val layerArray = o.optJSONArray("layers") ?: JSONArray()
+                for (k in 0 until layerArray.length()) {
+                    val lo = layerArray.optJSONObject(k) ?: continue
+                    layers.add(
+                        ShipLayer(
+                            name = lo.optString("name", ""),
+                            type = runCatching {
+                                LayerType.valueOf(lo.optString("type", LayerType.HULL.name))
+                            }.getOrDefault(LayerType.HULL),
+                            level = lo.optInt("level", 1),
+                            bindTo = lo.optInt("bindTo", -1),
+                            imagePath = lo.optString("imagePath", "")
+                        )
+                    )
+                }
+                ships.add(
+                    Ship(
+                        code = o.optString("code", ""),
+                        maxSpeed = o.optString("maxSpeed", ""),
+                        tonnage = o.optString("tonnage", ""),
+                        weight = o.optString("weight", ""),
+                        periodFrom = o.optString("periodFrom", ""),
+                        periodTo = o.optString("periodTo", ""),
+                        layers = layers,
+                        modifiedAt = o.optString("modifiedAt", "")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun persist() {
+        val f = file() ?: return
+        runCatching {
+            val array = JSONArray()
+            ships.forEach { ship ->
+                val o = JSONObject()
+                o.put("code", ship.code)
+                o.put("maxSpeed", ship.maxSpeed)
+                o.put("tonnage", ship.tonnage)
+                o.put("weight", ship.weight)
+                o.put("periodFrom", ship.periodFrom)
+                o.put("periodTo", ship.periodTo)
+                o.put("modifiedAt", ship.modifiedAt)
+                val layerArray = JSONArray()
+                ship.layers.forEach { layer ->
+                    val lo = JSONObject()
+                    lo.put("name", layer.name)
+                    lo.put("type", layer.type.name)
+                    lo.put("level", layer.level)
+                    lo.put("bindTo", layer.bindTo)
+                    lo.put("imagePath", layer.imagePath)
+                    layerArray.put(lo)
+                }
+                o.put("layers", layerArray)
+                array.put(o)
+            }
+            f.writeText(JSONObject().put("ships", array).toString())
+        }
+    }
 
     fun now(): String = SimpleDateFormat("yyyy.MM.DD", Locale.US).format(Date())
 
@@ -64,9 +152,11 @@ object ShipStore {
         draft.modifiedAt = now()
         val existing = ships.indexOfFirst { it.code == draft.code }
         if (existing >= 0) ships[existing] = draft.duplicate() else ships.add(draft.duplicate())
+        persist()
     }
 
     fun delete(ship: Ship) {
         ships.removeAll { it.code == ship.code }
+        persist()
     }
 }
