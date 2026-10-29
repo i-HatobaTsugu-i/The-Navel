@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     private var shipPreview: ShipPreviewView? = null
     private var pendingLayer = -1
     private var currentPanel: View? = null
+    private var currentScroll: android.widget.ScrollView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -187,7 +188,28 @@ class MainActivity : Activity() {
         setContentView(root)
         hideSystemBars()
         currentPanel = panel
+        currentScroll = scroll
         popIn(panel)
+    }
+
+    // 把输入字段滚进可视区：只滚必要的量，底部留 24dp 余量
+    private fun ensureVisible(field: View) {
+        val scroll = currentScroll ?: return
+        if (scroll.height <= 0) return
+        val fieldPos = IntArray(2)
+        field.getLocationInWindow(fieldPos)
+        val scrollPos = IntArray(2)
+        scroll.getLocationInWindow(scrollPos)
+        val topInContent = fieldPos[1] - scrollPos[1] + scroll.scrollY
+        val bottomInContent = topInContent + field.height
+        val margin = (24 * resources.displayMetrics.density).toInt()
+        val viewport = scroll.height
+        val target = when {
+            bottomInContent + margin > viewport -> bottomInContent + margin - viewport
+            topInContent - margin < 0 -> (topInContent - margin).coerceAtLeast(0)
+            else -> return
+        }
+        scroll.smoothScrollTo(0, target)
     }
 
     // 纸张收起：反向动画后再切页
@@ -552,10 +574,9 @@ class MainActivity : Activity() {
             input.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
-            // 输入法弹出 / 窗口缩放需要时间，多次重试把这一行滚到键盘上方
-            val rect = android.graphics.Rect(0, 0, display.width, display.height + 24)
-            listOf(120L, 260L, 420L, 600L, 820L, 1100L).forEach { delay ->
-                display.postDelayed({ display.requestRectangleOnScreen(rect, true) }, delay)
+            // 输入法弹出后把该行滚到可视区（多次重试以覆盖窗口缩放时序）
+            listOf(350L, 600L, 900L).forEach { delay ->
+                display.postDelayed({ ensureVisible(display) }, delay)
             }
         }
         return display to input
@@ -969,8 +990,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val extras = listOfNotNull(
-            ship.tonnage.takeIf { it.isNotBlank() }?.let { "吨位 $it" },
-            ship.weight.takeIf { it.isNotBlank() }?.let { "权重 $it" }
+            ship.tonnage.takeIf { it.isNotBlank() }?.let { "吨位 $it" }
         )
         if (extras.isNotEmpty()) {
             info.addView(TextView(this).apply {

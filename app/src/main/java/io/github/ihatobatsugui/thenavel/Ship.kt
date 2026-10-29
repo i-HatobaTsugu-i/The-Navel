@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.util.Date
 import java.util.Locale
 
@@ -108,7 +109,7 @@ object ShipStore {
                         periodFrom = o.optString("periodFrom", ""),
                         periodTo = o.optString("periodTo", ""),
                         layers = layers,
-                        modifiedAt = o.optString("modifiedAt", "")
+                        modifiedAt = normalizeDate(o.optString("modifiedAt", ""))
                     )
                 )
             }
@@ -145,7 +146,21 @@ object ShipStore {
         }
     }
 
-    fun now(): String = SimpleDateFormat("yyyy.MM.DD", Locale.US).format(Date())
+    fun now(): String = SimpleDateFormat("yyyy.MM.dd", Locale.US).format(Date())
+
+    // 旧版本把日期格式化成了「年.月.年内第几天」（DD），这里修正成「年.月.日」
+    private fun normalizeDate(raw: String): String {
+        val parts = raw.split('.')
+        if (parts.size != 3) return raw
+        val year = parts[0].toIntOrNull() ?: return raw
+        val month = parts[1].toIntOrNull() ?: return raw
+        val day = parts[2].toIntOrNull() ?: return raw
+        if (parts[2].length != 3) return raw
+        return runCatching {
+            val date = LocalDate.of(year, 1, 1).plusDays(day.toLong() - 1)
+            String.format(Locale.US, "%04d.%02d.%02d", date.year, date.monthValue, date.dayOfMonth)
+        }.getOrDefault(raw)
+    }
 
     fun save(draft: Ship) {
         if (draft.code.isBlank()) return
