@@ -33,6 +33,8 @@ class OceanView @JvmOverloads constructor(
     private var foamA = FloatArray(0)
     private var foamB = FloatArray(0)
     private var dither = FloatArray(0)
+    private var curlX = FloatArray(0)
+    private var curlY = FloatArray(0)
     private var convGrid = FloatArray(0)
     private var sourceBuf = FloatArray(0)
     private var gridCols = 0
@@ -52,6 +54,8 @@ class OceanView @JvmOverloads constructor(
         foamA = FloatArray(cols * rows)
         foamB = FloatArray(cols * rows)
         dither = FloatArray(cols * rows) { hash01(it % cols, it / cols, 7) }
+        curlX = FloatArray(cols * rows) { (hash01(it % cols, it / cols, 21) - 0.5f) * 2f }
+        curlY = FloatArray(cols * rows) { (hash01(it % cols, it / cols, 43) - 0.5f) * 2f }
         sourceBuf = FloatArray(cols * rows)
         gridCols = cols / GRID_STEP + 2
         gridRows = rows / GRID_STEP + 2
@@ -84,14 +88,21 @@ class OceanView @JvmOverloads constructor(
             var idx = 0
             for (j in 0 until rows) {
                 for (i in 0 until cols) {
-                    val advected = sampleBilinear(foamA, i - WIND_X, j - WIND_Y)
+                    val advected = sampleBilinear(
+                        foamA,
+                        i - (WIND_X + curlX[idx] * CURL),
+                        j - (WIND_Y + curlY[idx] * CURL)
+                    )
                     val left = foamA[j * cols + ((i - 1 + cols) % cols)]
                     val right = foamA[j * cols + (i + 1) % cols]
                     val up = foamA[((j - 1 + rows) % rows) * cols + i]
                     val down = foamA[((j + 1) % rows) * cols + i]
                     val average = (left + right + up + down) * 0.25f
                     val diffused = advected + (average - advected) * DIFFUSE
-                    foamB[idx] = (diffused * DECAY + sourceBuf[idx]).coerceIn(0f, 1f)
+                    var value = (diffused * DECAY + sourceBuf[idx]).coerceIn(0f, 1f)
+                    // 对比度拉伸：高浓度堆得更实、低浓度更稀，形成成团的分布
+                    if (value > 0.30f) value = (value + (value - 0.30f) * CONTRAST).coerceAtMost(1f)
+                    foamB[idx] = value
                     idx++
                 }
             }
@@ -139,7 +150,7 @@ class OceanView @JvmOverloads constructor(
                 val bottom = convGrid[base + gridCols] +
                     (convGrid[base + gridCols + 1] - convGrid[base + gridCols]) * fx
                 val value = top + (bottom - top) * fy
-                sourceBuf[idx++] = max(0f, value - 0.60f) * SOURCE_GAIN
+                sourceBuf[idx++] = max(0f, value - 0.64f) * SOURCE_GAIN
             }
         }
     }
@@ -210,11 +221,13 @@ class OceanView @JvmOverloads constructor(
         private const val GRID_STEP = 4
         private const val GRID_REFRESH = 10
         private const val OCTAVES = 2
-        private const val WIND_X = 0.32f
-        private const val WIND_Y = 0.06f
-        private const val DIFFUSE = 0.10f
+        private const val WIND_X = 0.96f
+        private const val WIND_Y = 0.18f
+        private const val CURL = 0.55f
+        private const val DIFFUSE = 0.07f
         private const val DECAY = 0.988f
-        private const val SOURCE_GAIN = 0.008f
+        private const val CONTRAST = 0.55f
+        private const val SOURCE_GAIN = 0.010f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
