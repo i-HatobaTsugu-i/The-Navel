@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
@@ -40,6 +41,7 @@ class MainActivity : Activity() {
     private var layersBox: LinearLayout? = null
     private var shipPreview: ShipPreviewView? = null
     private var pendingLayer = -1
+    private var currentPanel: View? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -163,7 +165,7 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(View(this).apply {
             setBackgroundColor(SCRIM)
-            if (onBlankTap != null) setOnClickListener { onBlankTap() }
+            if (onBlankTap != null) setOnClickListener { leave(onBlankTap) }
         }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
@@ -183,7 +185,36 @@ class MainActivity : Activity() {
 
         setContentView(root)
         hideSystemBars()
+        currentPanel = panel
         popIn(panel)
+    }
+
+    // 纸张收起：反向动画后再切页
+    private fun leave(action: () -> Unit) {
+        val panel = currentPanel
+        if (panel == null) {
+            action()
+            return
+        }
+        panel.animate()
+            .alpha(0f)
+            .scaleX(0.92f)
+            .scaleY(0.92f)
+            .setDuration(140)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction { action() }
+            .start()
+    }
+
+    private fun closeDialog(panel: View, dialog: Dialog) {
+        panel.animate()
+            .alpha(0f)
+            .scaleX(0.92f)
+            .scaleY(0.92f)
+            .setDuration(120)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction { dialog.dismiss() }
+            .start()
     }
 
     // 纸张上弹动画
@@ -227,7 +258,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (10 * dp).toInt()
             })
-            addView(linkButton("返回") { showMenu() }, LinearLayout.LayoutParams(
+            addView(linkButton("返回") { leave { showMenu() } }, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (8 * dp).toInt()
             })
@@ -259,7 +290,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             addView(text, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(linkButton("返回") { showMenu() }, LinearLayout.LayoutParams(
+            addView(linkButton("返回") { leave { showMenu() } }, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (10 * dp).toInt()
             })
@@ -287,7 +318,7 @@ class MainActivity : Activity() {
                 topMargin = if (index == 0) 0 else (12 * dp).toInt()
             })
         }
-        column.addView(linkButton("返回") { showMenu() }, LinearLayout.LayoutParams(
+        column.addView(linkButton("返回") { leave { showMenu() } }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = (12 * dp).toInt()
         })
@@ -326,7 +357,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#2B2B2B"))
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        topBar.addView(linkButton("返回") { showEditor() }, LinearLayout.LayoutParams(
+        topBar.addView(linkButton("返回") { leave { showEditor() } }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         outer.addView(topBar, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -387,19 +418,19 @@ class MainActivity : Activity() {
             showShipEditor()
             return
         }
-        showPaperDialog("当前内容尚未保存", "是否先保存当前船只，再新建？") { column, dialog ->
+        showPaperDialog("当前内容尚未保存", "是否先保存当前船只，再新建？") { column, dialog, panel ->
             column.addView(linkButton("保存并新建") {
-                dialog.dismiss()
+                closeDialog(panel, dialog)
                 saveShip(silent = true)
                 ShipStore.draft = Ship()
                 showShipEditor()
             }, dialogButtonParams())
             column.addView(linkButton("直接新建") {
-                dialog.dismiss()
+                closeDialog(panel, dialog)
                 ShipStore.draft = Ship()
                 showShipEditor()
             }, dialogButtonParams())
-            column.addView(linkButton("取消") { dialog.dismiss() }, dialogButtonParams())
+            column.addView(linkButton("取消") { closeDialog(panel, dialog) }, dialogButtonParams())
         }
     }
 
@@ -412,7 +443,7 @@ class MainActivity : Activity() {
     private fun showPaperDialog(
         title: String,
         message: String?,
-        build: (LinearLayout, Dialog) -> Unit
+        build: (LinearLayout, Dialog, View) -> Unit
     ) {
         val dp = resources.displayMetrics.density
         val dialog = Dialog(this)
@@ -436,7 +467,7 @@ class MainActivity : Activity() {
                 topMargin = (6 * dp).toInt()
             })
         }
-        build(column, dialog)
+        build(column, dialog, panel)
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         dialog.setContentView(panel)
@@ -674,13 +705,15 @@ class MainActivity : Activity() {
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(nameInput, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
 
-        // 类型（纯文字 + ↓）
-        row.addView(plainText("${layer.type.label} ↓", Color.parseColor("#2B2B2B")) {
+        // 类型：纯文字、加粗、无箭头，与绑定控件隔开
+        val typeView = plainText(layer.type.label, Color.parseColor("#2B2B2B")) {
             layer.type = layer.type.next()
             refreshLayers()
-        }, LinearLayout.LayoutParams(
+        }
+        typeView.typeface = Typeface.create(pixelFont, Typeface.BOLD)
+        row.addView(typeView, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = (6 * dp).toInt()
+            marginStart = (16 * dp).toInt()
         })
 
         // 绑定（纯文字 + ↓）
@@ -762,11 +795,11 @@ class MainActivity : Activity() {
                 values.add(other + 1)
             }
         }
-        showPaperDialog("绑定到哪个图层", null) { column, dialog ->
+        showPaperDialog("绑定到哪个图层", null) { column, dialog, panel ->
             labels.forEachIndexed { which, label ->
                 column.addView(linkButton(label) {
                     layer.bindTo = values[which]
-                    dialog.dismiss()
+                    closeDialog(panel, dialog)
                     refreshLayers()
                 }, dialogButtonParams())
             }
@@ -801,20 +834,31 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        if (ShipStore.ships.isEmpty()) {
-            column.addView(TextView(this).apply {
-                text = "暂无已保存的船只"
-                textSize = 16f
-                typeface = pixelFont
-                setTextColor(Color.parseColor("#5A5A5A"))
-            }, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        } else {
-            ShipStore.ships.forEach { ship -> column.addView(shipEntry(ship, dp, dialog)) }
-        }
+        val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(listBox, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        column.addView(linkButton("保存") { saveShip() }, dialogButtonParams())
-        column.addView(linkButton("关闭") { dialog.dismiss() }, dialogButtonParams())
+        fun renderList() {
+            listBox.removeAllViews()
+            if (ShipStore.ships.isEmpty()) {
+                listBox.addView(TextView(this).apply {
+                    text = "暂无已保存的船只"
+                    textSize = 16f
+                    typeface = pixelFont
+                    setTextColor(Color.parseColor("#5A5A5A"))
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            } else {
+                ShipStore.ships.forEach { ship -> listBox.addView(shipEntry(ship, dp, dialog)) }
+            }
+        }
+        renderList()
+
+        column.addView(linkButton("保存当前船只") {
+            saveShip()
+            renderList()
+        }, dialogButtonParams())
+        column.addView(linkButton("关闭") { closeDialog(panel, dialog) }, dialogButtonParams())
 
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
