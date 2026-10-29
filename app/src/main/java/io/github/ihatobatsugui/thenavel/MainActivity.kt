@@ -576,6 +576,11 @@ class MainActivity : Activity() {
             if (!hasFocus) display.setBlinking(false)
         }
         display.setOnClickListener {
+            // 每次点入都把「显示的当前值」同步回隐藏输入框，并重置输入法组合状态；
+            // 否则读取船只后输入框里可能残留上一次的组合文本，退格会先清组合而看似“删不掉”
+            val current = if (display.isPlaceholder) "" else display.text.toString()
+            input.setText(current)
+            input.setSelection(current.length)
             input.requestFocus()
             display.setBlinking(true)
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
