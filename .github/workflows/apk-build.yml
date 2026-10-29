@@ -63,10 +63,11 @@ jobs:
           TODAY=$(date -u +%Y.%m.%d)
           CUR=$(cat version.txt 2>/dev/null || true)
           case "$CUR" in
-            "$TODAY".*) N=$(( ${CUR##*.} + 1 ));;
+            "$TODAY".*) N=$(( 10#${CUR##*.} + 1 ));;
             *) N=1;;
           esac
-          VERSION="$TODAY.$N"
+          # 序号统一补两位：2026.10.29.02
+          VERSION=$(printf "%s.%02d" "$TODAY" "$N")
           echo "$VERSION" > version.txt
 
           PREV=$(git log -1 --format=%H -- version.txt)
