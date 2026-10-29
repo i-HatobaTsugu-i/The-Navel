@@ -7,6 +7,8 @@ import java.util.Locale
 enum class LayerType(val label: String) {
     HULL("船体"),
     TURRET("炮塔"),
+    FUNNEL("烟囱"),
+    MAGAZINE("弹药库"),
     DECOR("装饰物");
 
     fun next(): LayerType {

@@ -409,11 +409,7 @@ class MainActivity : Activity() {
     }
 
     private fun confirmNewShip() {
-        val draft = ShipStore.draft
-        val dirty = draft.code.isNotBlank() || draft.maxSpeed.isNotBlank() ||
-            draft.periodFrom.isNotBlank() || draft.periodTo.isNotBlank() ||
-            draft.layers.isNotEmpty()
-        if (!dirty) {
+        if (!draftDirty()) {
             ShipStore.draft = Ship()
             showShipEditor()
             return
@@ -476,10 +472,11 @@ class MainActivity : Activity() {
             min((resources.displayMetrics.widthPixels - 80 * dp).toInt(), (420 * dp).toInt()),
             LinearLayout.LayoutParams.WRAP_CONTENT)
         dialog.show()
+        dialog.setCanceledOnTouchOutside(false)
         popIn(panel)
     }
 
-    // ---------- 输入：自绘键盘，不弹系统输入法 ----------
+    // ---------- 纸张与弹窗 ----------
 
 
     private fun paperPanel(): PaperPanel {
@@ -546,6 +543,11 @@ class MainActivity : Activity() {
             input.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            // 等输入法弹出后把这一行滚到可见区域，避免被键盘遮住
+            display.postDelayed({
+                val rect = android.graphics.Rect(0, 0, display.width, display.height)
+                display.requestRectangleOnScreen(rect, true)
+            }, 280)
         }
         return display to input
     }
@@ -868,7 +870,40 @@ class MainActivity : Activity() {
             min((resources.displayMetrics.widthPixels - 40 * dp).toInt(), (520 * dp).toInt()),
             LinearLayout.LayoutParams.WRAP_CONTENT)
         dialog.show()
+        dialog.setCanceledOnTouchOutside(false)
         popIn(panel)
+    }
+
+    private fun draftDirty(): Boolean {
+        val d = ShipStore.draft
+        return d.code.isNotBlank() || d.maxSpeed.isNotBlank() ||
+            d.periodFrom.isNotBlank() || d.periodTo.isNotBlank() || d.layers.isNotEmpty()
+    }
+
+    // 读取船只：有未保存内容时先询问
+    private fun confirmLoad(ship: Ship, dialog: Dialog) {
+        if (!draftDirty()) {
+            loadShip(ship, dialog)
+            return
+        }
+        showPaperDialog("当前内容尚未保存", "是否先保存当前船只，再读取？") { column, inner, panel ->
+            column.addView(linkButton("保存并读取") {
+                closeDialog(panel, inner)
+                saveShip(silent = true)
+                loadShip(ship, dialog)
+            }, dialogButtonParams())
+            column.addView(linkButton("直接读取") {
+                closeDialog(panel, inner)
+                loadShip(ship, dialog)
+            }, dialogButtonParams())
+            column.addView(linkButton("取消") { closeDialog(panel, inner) }, dialogButtonParams())
+        }
+    }
+
+    private fun loadShip(ship: Ship, dialog: Dialog) {
+        ShipStore.draft = ship.duplicate()
+        dialog.dismiss()
+        showShipEditor()
     }
 
     private fun shipEntry(ship: Ship, dp: Float, dialog: Dialog): View {
@@ -876,12 +911,6 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, (6 * dp).toInt(), 0, (6 * dp).toInt())
-            isClickable = true
-            setOnClickListener {
-                ShipStore.draft = ship.duplicate()
-                dialog.dismiss()
-                showShipEditor()
-            }
         }
         row.addView(ShipPreviewView(this).apply {
             layers = ship.layers
@@ -907,6 +936,11 @@ class MainActivity : Activity() {
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = (10 * dp).toInt()
         })
+
+        row.addView(iconView(R.drawable.ic_edit) { confirmLoad(ship, dialog) },
+            LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()).apply {
+                marginEnd = (6 * dp).toInt()
+            })
 
         row.addView(iconView(R.drawable.ic_trash) {
             ShipStore.delete(ship)
