@@ -7,7 +7,15 @@ plugins {
 def versionFile = rootProject.file('version.txt')
 def appVersionName = (project.findProperty('appVersion')
         ?: (versionFile.exists() ? versionFile.text.trim() : '0.0.0')).toString()
-def appVersionDigits = appVersionName.replaceAll('[^0-9]', '')
+// versionCode 必须单调递增：日期拼成 8 位、当天序号补成 2 位（2026.10.29.1 → 2026102901），
+// 直接去掉点号会因序号位数变化而变小（2026.10.28.34 → 2026102834 > 2026.10.29.1 → 202610291），被系统当成降级。
+def versionParts = appVersionName.split('\\.')
+def appVersionCode = 1
+if (versionParts.length >= 4) {
+    def dayPart = (versionParts[0] + versionParts[1] + versionParts[2]).toInteger()
+    def seqPart = Math.min(versionParts[3].toInteger(), 99)
+    appVersionCode = dayPart * 100 + seqPart
+}
 
 // 固定签名密钥：CI 首次构建时生成并提交到 signing/keystore.p12
 // 只有始终用同一把钥匙签名，安装过的旧版本才能被覆盖更新
@@ -21,7 +29,7 @@ android {
         applicationId 'io.github.ihatobatsugui.thenavel'
         minSdk 26
         targetSdk 34
-        versionCode appVersionDigits ? appVersionDigits.toInteger() : 1
+        versionCode appVersionCode
         versionName appVersionName
     }
 

@@ -62,10 +62,9 @@ jobs:
         run: |
           TODAY=$(date -u +%Y.%m.%d)
           CUR=$(cat version.txt 2>/dev/null || true)
-          LAST=${CUR##*.}
-          case "$LAST" in
-            ''|*[!0-9]*) N=1;;
-            *) N=$(( LAST + 1 ));;
+          case "$CUR" in
+            "$TODAY".*) N=$(( ${CUR##*.} + 1 ));;
+            *) N=1;;
           esac
           VERSION="$TODAY.$N"
           echo "$VERSION" > version.txt
