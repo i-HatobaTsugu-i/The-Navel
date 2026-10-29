@@ -83,7 +83,7 @@ class OceanView @JvmOverloads constructor(
         if (frameIndex % GRID_REFRESH == 0) updateConv(t)
 
         if (frameIndex == 0) {
-            for (idx in foamA.indices) foamA[idx] = sourceBuf[idx] * 120f
+            for (idx in foamA.indices) foamA[idx] = (sourceBuf[idx] * 120f).coerceAtMost(0.85f)
         } else {
             var idx = 0
             for (j in 0 until rows) {
@@ -99,9 +99,7 @@ class OceanView @JvmOverloads constructor(
                     val down = foamA[((j + 1) % rows) * cols + i]
                     val average = (left + right + up + down) * 0.25f
                     val diffused = advected + (average - advected) * DIFFUSE
-                    var value = (diffused * DECAY + sourceBuf[idx]).coerceIn(0f, 1f)
-                    // 对比度拉伸：高浓度堆得更实、低浓度更稀，形成成团的分布
-                    if (value > 0.30f) value = (value + (value - 0.30f) * CONTRAST).coerceAtMost(1f)
+                    val value = (diffused * DECAY + sourceBuf[idx]).coerceIn(0f, 0.85f)
                     foamB[idx] = value
                     idx++
                 }
@@ -114,7 +112,7 @@ class OceanView @JvmOverloads constructor(
         var index = 0
         for (j in 0 until rows) {
             for (i in 0 until cols) {
-                val value = foamA[index] * 1.35f
+                val value = (foamA[index] * 1.15f).coerceIn(0f, 0.85f)
                 val d = dither[index]
                 pixels[index++] = when {
                     d < value * 0.55f -> FOAM
@@ -221,13 +219,12 @@ class OceanView @JvmOverloads constructor(
         private const val GRID_STEP = 4
         private const val GRID_REFRESH = 10
         private const val OCTAVES = 2
-        private const val WIND_X = 0.96f
-        private const val WIND_Y = 0.18f
+        private const val WIND_X = 0.48f
+        private const val WIND_Y = 0.09f
         private const val CURL = 0.55f
         private const val DIFFUSE = 0.07f
         private const val DECAY = 0.988f
-        private const val CONTRAST = 0.55f
-        private const val SOURCE_GAIN = 0.010f
+        private const val SOURCE_GAIN = 0.0035f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
