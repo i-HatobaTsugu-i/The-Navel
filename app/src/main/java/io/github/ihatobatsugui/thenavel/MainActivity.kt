@@ -536,7 +536,7 @@ class MainActivity : Activity() {
     ): Pair<TextView, EditText> {
         val hintColor = Color.parseColor("#9A9384")
         val inkColor = Color.parseColor("#1F1F1F")
-        val display = TextView(this).apply {
+        val display = InputDisplayView(this).apply {
             text = initial.ifEmpty { hint }
             textSize = 16f
             typeface = pixelFont
@@ -570,8 +570,12 @@ class MainActivity : Activity() {
                 }
             })
         }
+        input.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) display.setBlinking(false)
+        }
         display.setOnClickListener {
             input.requestFocus()
+            display.setBlinking(true)
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
             // 输入法弹出后把该行滚到可视区（多次重试以覆盖窗口缩放时序）
