@@ -375,6 +375,14 @@ class MainActivity : Activity() {
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 8, suffix = "knot") {
             ShipStore.draft.maxSpeed = it
         }, fieldParams(dp))
+        content.addView(systemRow("吨位", ShipStore.draft.tonnage, "点击输入",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 10) {
+            ShipStore.draft.tonnage = it
+        }, fieldParams(dp))
+        content.addView(systemRow("权重", ShipStore.draft.weight, "点击输入",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 10) {
+            ShipStore.draft.weight = it
+        }, fieldParams(dp))
         content.addView(periodRow(), fieldParams(dp))
 
         content.addView(TextView(this).apply {
@@ -877,6 +885,7 @@ class MainActivity : Activity() {
     private fun draftDirty(): Boolean {
         val d = ShipStore.draft
         return d.code.isNotBlank() || d.maxSpeed.isNotBlank() ||
+            d.tonnage.isNotBlank() || d.weight.isNotBlank() ||
             d.periodFrom.isNotBlank() || d.periodTo.isNotBlank() || d.layers.isNotEmpty()
     }
 
@@ -906,6 +915,19 @@ class MainActivity : Activity() {
         showShipEditor()
     }
 
+    // 删除船只：先确认
+    private fun confirmDelete(ship: Ship, parent: Dialog) {
+        showPaperDialog("删除船只", "确定删除「${ship.code}」？") { column, inner, panel ->
+            column.addView(linkButton("删除") {
+                closeDialog(panel, inner)
+                ShipStore.delete(ship)
+                parent.dismiss()
+                showLoadShips()
+            }, dialogButtonParams())
+            column.addView(linkButton("取消") { closeDialog(panel, inner) }, dialogButtonParams())
+        }
+    }
+
     private fun shipEntry(ship: Ship, dp: Float, dialog: Dialog): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -932,6 +954,19 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#5A5A5A"))
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val extras = listOfNotNull(
+            ship.tonnage.takeIf { it.isNotBlank() }?.let { "吨位 $it" },
+            ship.weight.takeIf { it.isNotBlank() }?.let { "权重 $it" }
+        )
+        if (extras.isNotEmpty()) {
+            info.addView(TextView(this).apply {
+                text = extras.joinToString("  ")
+                textSize = 12f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#5A5A5A"))
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
         row.addView(info, LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = (10 * dp).toInt()
@@ -943,9 +978,7 @@ class MainActivity : Activity() {
             })
 
         row.addView(iconView(R.drawable.ic_trash) {
-            ShipStore.delete(ship)
-            dialog.dismiss()
-            showLoadShips()
+            confirmDelete(ship, dialog)
         }, LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()))
         return row
     }

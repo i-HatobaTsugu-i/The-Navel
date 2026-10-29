@@ -9,6 +9,7 @@ enum class LayerType(val label: String) {
     TURRET("炮塔"),
     FUNNEL("烟囱"),
     MAGAZINE("弹药库"),
+    SAIL("风帆"),
     DECOR("装饰物");
 
     fun next(): LayerType {
@@ -31,6 +32,8 @@ data class ShipLayer(
 data class Ship(
     var code: String = "",
     var maxSpeed: String = "",
+    var tonnage: String = "",
+    var weight: String = "",
     var periodFrom: String = "",
     var periodTo: String = "",
     var layers: MutableList<ShipLayer> = mutableListOf(),
@@ -39,6 +42,8 @@ data class Ship(
     fun duplicate(): Ship = Ship(
         code = code,
         maxSpeed = maxSpeed,
+        tonnage = tonnage,
+        weight = weight,
         periodFrom = periodFrom,
         periodTo = periodTo,
         layers = layers.map { it.copy() }.toMutableList(),
