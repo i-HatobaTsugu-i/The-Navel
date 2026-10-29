@@ -34,7 +34,7 @@ class MainActivity : Activity() {
 
     private val pixelFont by lazy { resources.getFont(R.font.unifont) }
 
-    private enum class Screen { MENU, EDITOR, SHIP_EDITOR, LOAD_SHIPS, LOG, CREDITS }
+    private enum class Screen { MENU, EDITOR, SHIP_EDITOR, LOG, CREDITS }
 
     private var screen = Screen.MENU
     private var layersBox: LinearLayout? = null
@@ -183,6 +183,21 @@ class MainActivity : Activity() {
 
         setContentView(root)
         hideSystemBars()
+        popIn(panel)
+    }
+
+    // 纸张上弹动画
+    private fun popIn(view: View) {
+        view.alpha = 0f
+        view.scaleX = 0.92f
+        view.scaleY = 0.92f
+        view.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(170)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
     }
 
     // ---------- 错误日志 ----------
@@ -353,11 +368,6 @@ class MainActivity : Activity() {
             topMargin = (8 * dp).toInt()
         })
 
-        content.addView(linkButton("保存") { saveShip() }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (14 * dp).toInt()
-        })
-
         outer.addView(content, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         panel.addView(outer, FrameLayout.LayoutParams(
@@ -435,6 +445,7 @@ class MainActivity : Activity() {
             min((resources.displayMetrics.widthPixels - 80 * dp).toInt(), (420 * dp).toInt()),
             LinearLayout.LayoutParams.WRAP_CONTENT)
         dialog.show()
+        popIn(panel)
     }
 
     // ---------- 输入：自绘键盘，不弹系统输入法 ----------
@@ -774,13 +785,10 @@ class MainActivity : Activity() {
         if (!silent) Toast.makeText(this, "已保存 ${draft.code}", Toast.LENGTH_SHORT).show()
     }
 
+    // 软盘菜单：以弹窗形式盖在船只编辑器上，不离开编辑器
     private fun showLoadShips() {
-        screen = Screen.LOAD_SHIPS
         val dp = resources.displayMetrics.density
-        val panelWidth = min(
-            (resources.displayMetrics.widthPixels - 40 * dp).toInt(),
-            (520 * dp).toInt()
-        )
+        val dialog = Dialog(this)
         val panel = paperPanel()
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         column.addView(TextView(this).apply {
@@ -802,20 +810,24 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         } else {
-            ShipStore.ships.forEach { ship -> column.addView(shipEntry(ship, dp)) }
+            ShipStore.ships.forEach { ship -> column.addView(shipEntry(ship, dp, dialog)) }
         }
 
-        column.addView(linkButton("返回") { showShipEditor() }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (10 * dp).toInt()
-        })
+        column.addView(linkButton("保存") { saveShip() }, dialogButtonParams())
+        column.addView(linkButton("关闭") { dialog.dismiss() }, dialogButtonParams())
 
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        showPaperPage(panel, panelWidth) { showShipEditor() }
+        dialog.setContentView(panel)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            min((resources.displayMetrics.widthPixels - 40 * dp).toInt(), (520 * dp).toInt()),
+            LinearLayout.LayoutParams.WRAP_CONTENT)
+        dialog.show()
+        popIn(panel)
     }
 
-    private fun shipEntry(ship: Ship, dp: Float): View {
+    private fun shipEntry(ship: Ship, dp: Float, dialog: Dialog): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -823,6 +835,7 @@ class MainActivity : Activity() {
             isClickable = true
             setOnClickListener {
                 ShipStore.draft = ship.duplicate()
+                dialog.dismiss()
                 showShipEditor()
             }
         }
@@ -853,6 +866,7 @@ class MainActivity : Activity() {
 
         row.addView(iconView(R.drawable.ic_trash) {
             ShipStore.delete(ship)
+            dialog.dismiss()
             showLoadShips()
         }, LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()))
         return row
@@ -902,7 +916,6 @@ class MainActivity : Activity() {
         when (screen) {
             Screen.MENU -> super.onBackPressed()
             Screen.SHIP_EDITOR -> showEditor()
-            Screen.LOAD_SHIPS -> showShipEditor()
             else -> showMenu()
         }
     }
