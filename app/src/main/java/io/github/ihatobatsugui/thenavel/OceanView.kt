@@ -221,10 +221,10 @@ class OceanView @JvmOverloads constructor(
         private const val OCTAVES = 2
         private const val WIND_X = 0.48f
         private const val WIND_Y = 0.09f
-        private const val CURL = 0.55f
-        private const val DIFFUSE = 0.07f
-        private const val DECAY = 0.988f
-        private const val SOURCE_GAIN = 0.0035f
+        private const val CURL = 0.12f
+        private const val DIFFUSE = 0.010f
+        private const val DECAY = 0.995f
+        private const val SOURCE_GAIN = 0.0025f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
