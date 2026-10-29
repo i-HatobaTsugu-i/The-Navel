@@ -131,7 +131,7 @@ class OceanView @JvmOverloads constructor(
             val cy = gj * GRID_STEP
             for (gx in 0 until gridCols) {
                 val cx = gx * GRID_STEP
-                convGrid[gi++] = fbm(cx * 0.045f - t * 0.10f, cy * 0.045f + t * 0.02f, 9)
+                convGrid[gi++] = fbm(cx * 0.045f - t * CONV_MOVE_X, cy * 0.045f + t * CONV_MOVE_Y, 9)
             }
         }
         var idx = 0
@@ -148,7 +148,7 @@ class OceanView @JvmOverloads constructor(
                 val bottom = convGrid[base + gridCols] +
                     (convGrid[base + gridCols + 1] - convGrid[base + gridCols]) * fx
                 val value = top + (bottom - top) * fy
-                sourceBuf[idx++] = max(0f, value - 0.64f) * SOURCE_GAIN
+                sourceBuf[idx++] = max(0f, value - 0.72f) * SOURCE_GAIN
             }
         }
     }
@@ -217,14 +217,17 @@ class OceanView @JvmOverloads constructor(
     companion object {
         private const val FRAME_MS = 16L
         private const val GRID_STEP = 4
-        private const val GRID_REFRESH = 10
+        private const val GRID_REFRESH = 5
         private const val OCTAVES = 2
         private const val WIND_X = 0.48f
         private const val WIND_Y = 0.09f
-        private const val CURL = 0.12f
-        private const val DIFFUSE = 0.010f
+        private const val CURL = 0.08f
+        private const val DIFFUSE = 0.003f
         private const val DECAY = 0.995f
-        private const val SOURCE_GAIN = 0.0025f
+        private const val SOURCE_GAIN = 0.0015f
+        // 源区本身也随同一股风漂移，否则会在原地不断补泡沫、最终铺成均匀薄雾
+        private const val CONV_MOVE_X = 1.30f
+        private const val CONV_MOVE_Y = 0.24f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
