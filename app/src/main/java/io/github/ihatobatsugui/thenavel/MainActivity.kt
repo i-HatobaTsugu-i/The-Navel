@@ -11,12 +11,14 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -321,8 +323,10 @@ class MainActivity : Activity() {
         content.addView(preview, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, (110 * dp).toInt()))
 
-        content.addView(codeRow(), fieldParams(dp))
-        content.addView(inputRow("最高速度", ShipStore.draft.maxSpeed, "点击输入", true, 8, "knot") {
+        content.addView(systemRow("船只代号", ShipStore.draft.code, "点击输入",
+            InputType.TYPE_CLASS_TEXT, 24) { ShipStore.draft.code = it }, fieldParams(dp))
+        content.addView(systemRow("最高速度", ShipStore.draft.maxSpeed, "点击输入",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 8, suffix = "knot") {
             ShipStore.draft.maxSpeed = it
         }, fieldParams(dp))
         content.addView(periodRow(), fieldParams(dp))
@@ -435,121 +439,6 @@ class MainActivity : Activity() {
 
     // ---------- 输入：自绘键盘，不弹系统输入法 ----------
 
-    private fun askText(
-        title: String,
-        initial: String,
-        maxLen: Int,
-        keyRows: List<String>? = null,
-        onDone: (String) -> Unit
-    ) {
-        val dp = resources.displayMetrics.density
-        val dialog = Dialog(this)
-        val dialogWidth = min(
-            (resources.displayMetrics.widthPixels - 32 * dp).toInt(),
-            (620 * dp).toInt()
-        )
-
-        val machine = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#2F2F2F"))
-            setPadding((10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt())
-        }
-
-        // 压纸滚筒
-        machine.addView(View(this).apply { setBackgroundColor(Color.parseColor("#4A4A4A")) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (10 * dp).toInt()))
-
-        machine.addView(TextView(this).apply {
-            text = title
-            textSize = 12f
-            typeface = pixelFont
-            setTextColor(Color.parseColor("#B9B2A2"))
-            setPadding(0, (6 * dp).toInt(), 0, (2 * dp).toInt())
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-        var value = initial
-        val display = TextView(this).apply {
-            text = value
-            textSize = 20f
-            typeface = pixelFont
-            setTextColor(INK)
-            setPadding((8 * dp).toInt(), (4 * dp).toInt(), (8 * dp).toInt(), (4 * dp).toInt())
-        }
-        val paper = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#EFE8D6")) }
-        paper.addView(display, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            gravity = Gravity.CENTER_VERTICAL
-        })
-        machine.addView(paper, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (46 * dp).toInt()).apply {
-            topMargin = (4 * dp).toInt()
-        })
-
-        fun refresh() {
-            display.text = value
-            // 落墨：新字先压暗、整体微弹一下，再回到常态墨色
-            display.scaleX = 1.03f
-            display.scaleY = 1.03f
-            display.setTextColor(INK_FRESH)
-            display.animate().scaleX(1f).scaleY(1f).setDuration(90).start()
-            display.postDelayed({ display.setTextColor(INK) }, 70)
-        }
-
-        fun addRow(chars: String) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            chars.forEach { c ->
-                row.addView(RoundKeyView(this).apply {
-                    label = c.toString()
-                    onTap = {
-                        if (value.length < maxLen) {
-                            value += c
-                            refresh()
-                        }
-                    }
-                }, LinearLayout.LayoutParams(0, (40 * dp).toInt(), 1f).apply {
-                    marginStart = (3 * dp).toInt()
-                })
-            }
-            machine.addView(row, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (4 * dp).toInt()
-            })
-        }
-
-        fun addActionRow(labels: List<String>, actions: List<() -> Unit>) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            labels.forEachIndexed { index, label ->
-                row.addView(RoundKeyView(this).apply {
-                    this.label = label
-                    onTap = actions[index]
-                }, LinearLayout.LayoutParams(0, (40 * dp).toInt(), 1f).apply {
-                    marginStart = (3 * dp).toInt()
-                })
-            }
-            machine.addView(row, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (8 * dp).toInt()
-            })
-        }
-
-        val rows = keyRows ?: listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM_-")
-        rows.forEach { addRow(it) }
-
-        addActionRow(
-            listOf("退格", "取消", "确认"),
-            listOf(
-                { if (value.isNotEmpty()) { value = value.dropLast(1); refresh() } },
-                { dialog.dismiss() },
-                { onDone(value); dialog.dismiss() }
-            )
-        )
-
-        dialog.setContentView(machine)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#1A1A1A")))
-        dialog.window?.setLayout(dialogWidth, LinearLayout.LayoutParams.WRAP_CONTENT)
-        dialog.show()
-    }
 
     private fun paperPanel(): PaperPanel {
         val dp = resources.displayMetrics.density
@@ -566,70 +455,66 @@ class MainActivity : Activity() {
         topMargin = (8 * dp).toInt()
     }
 
-    /** 船只代号：可见的是自绘文字，实际接收输入的是 1×1 的隐藏 EditText，所以会弹出系统输入法但不显示系统输入框。 */
-    private fun codeRow(): View {
-        val dp = resources.displayMetrics.density
+    /** 隐藏 1dp 透明 EditText：接收系统输入法输入，界面上只显示自绘文字。 */
+    private fun systemField(
+        initial: String,
+        hint: String,
+        inputType: Int,
+        maxLen: Int,
+        digitsOnly: Boolean,
+        onChange: (String) -> Unit
+    ): Pair<TextView, EditText> {
         val hintColor = Color.parseColor("#9A9384")
         val inkColor = Color.parseColor("#1F1F1F")
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        row.addView(TextView(this).apply {
-            text = "船只代号："
-            textSize = 16f
-            typeface = pixelFont
-            includeFontPadding = false
-            setTextColor(Color.parseColor("#2B2B2B"))
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
         val display = TextView(this).apply {
-            text = ShipStore.draft.code.ifEmpty { "点击输入" }
+            text = initial.ifEmpty { hint }
             textSize = 16f
             typeface = pixelFont
             includeFontPadding = false
-            setTextColor(if (ShipStore.draft.code.isEmpty()) hintColor else inkColor)
+            setTextColor(if (initial.isEmpty()) hintColor else inkColor)
             isClickable = true
         }
-
+        val filters = mutableListOf<InputFilter>(InputFilter.LengthFilter(maxLen))
+        if (digitsOnly) {
+            filters.add(InputFilter { source, _, _, _, _, _ ->
+                source.filter { it.isDigit() || it == ',' }
+            })
+        }
         val input = EditText(this).apply {
-            setText(ShipStore.draft.code)
+            setText(initial)
             setSelection(text.length)
             isSingleLine = true
-            inputType = InputType.TYPE_CLASS_TEXT
+            this.inputType = inputType
+            imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
             alpha = 0f
             setBackgroundColor(Color.TRANSPARENT)
+            this.filters = filters.toTypedArray()
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
                 override fun afterTextChanged(s: Editable?) {
                     val value = s?.toString() ?: ""
-                    ShipStore.draft.code = value
-                    display.text = if (value.isEmpty()) "点击输入" else value
+                    display.text = if (value.isEmpty()) hint else value
                     display.setTextColor(if (value.isEmpty()) hintColor else inkColor)
+                    onChange(value)
                 }
             })
         }
-
         display.setOnClickListener {
             input.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
         }
-
-        row.addView(display, LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
-        return underlined(row)
+        return display to input
     }
 
-    private fun inputRow(
+    private fun systemRow(
         label: String,
         initial: String,
         hint: String,
-        numeric: Boolean,
+        inputType: Int,
         maxLen: Int,
+        digitsOnly: Boolean = false,
         suffix: String? = null,
         onChange: (String) -> Unit
     ): View {
@@ -646,29 +531,10 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#2B2B2B"))
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-        var current = initial
-        val value = TextView(this).apply {
-            text = if (current.isEmpty()) hint else current
-            textSize = 16f
-            typeface = pixelFont
-            includeFontPadding = false
-            setTextColor(if (current.isEmpty()) Color.parseColor("#9A9384")
-            else Color.parseColor("#1F1F1F"))
-            isClickable = true
-            setOnClickListener {
-                askText(label, current, maxLen,
-                    if (numeric) listOf("1234567890", ".-") else null) { v ->
-                    current = v
-                    onChange(v)
-                    text = if (v.isEmpty()) hint else v
-                    setTextColor(if (v.isEmpty()) Color.parseColor("#9A9384")
-                    else Color.parseColor("#1F1F1F"))
-                }
-            }
-        }
-        row.addView(value, LinearLayout.LayoutParams(
+        val (display, input) = systemField(initial, hint, inputType, maxLen, digitsOnly, onChange)
+        row.addView(display, LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
         if (suffix != null) {
             row.addView(TextView(this).apply {
                 text = suffix
@@ -685,6 +551,7 @@ class MainActivity : Activity() {
     }
 
     private fun periodRow(): View {
+        val dp = resources.displayMetrics.density
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -698,17 +565,16 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        var from = ShipStore.draft.periodFrom
-        var to = ShipStore.draft.periodTo
-        val fromView = periodValue("起始", from) { v ->
-            from = v
-            ShipStore.draft.periodFrom = v
-        }
-        val toView = periodValue("结束", to) { v ->
-            to = v
-            ShipStore.draft.periodTo = v
-        }
-        row.addView(fromView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val (fromDisplay, fromInput) = systemField(
+            ShipStore.draft.periodFrom, "Y,M,D", InputType.TYPE_CLASS_TEXT, 12, true
+        ) { ShipStore.draft.periodFrom = it }
+        val (toDisplay, toInput) = systemField(
+            ShipStore.draft.periodTo, "Y,M,D", InputType.TYPE_CLASS_TEXT, 12, true
+        ) { ShipStore.draft.periodTo = it }
+
+        row.addView(fromDisplay, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(fromInput, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
         row.addView(TextView(this).apply {
             text = " ~ "
             textSize = 16f
@@ -717,30 +583,10 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#2B2B2B"))
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        row.addView(toView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(toDisplay, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(toInput, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
         return underlined(row)
-    }
-
-    private fun periodValue(title: String, initial: String, onChange: (String) -> Unit): TextView {
-        var current = initial
-        return TextView(this).apply {
-            text = if (current.isEmpty()) "Y,M,D" else current
-            textSize = 16f
-            typeface = pixelFont
-            includeFontPadding = false
-            setTextColor(if (current.isEmpty()) Color.parseColor("#9A9384")
-            else Color.parseColor("#1F1F1F"))
-            isClickable = true
-            setOnClickListener {
-                askText(title, current, 12, listOf("1234567890", ",")) { v ->
-                    current = v
-                    onChange(v)
-                    text = if (v.isEmpty()) "Y,M,D" else v
-                    setTextColor(if (v.isEmpty()) Color.parseColor("#9A9384")
-                    else Color.parseColor("#1F1F1F"))
-                }
-            }
-        }
     }
 
     private fun underlined(row: View): View {
@@ -800,27 +646,22 @@ class MainActivity : Activity() {
         }
 
         // 层数
-        val levelView = plainText(layer.level.toString(), Color.parseColor("#1F1F1F")) {
-            askText("层数", layer.level.toString(), 3, listOf("1234567890")) { v ->
-                layer.level = v.toIntOrNull() ?: layer.level
-                refreshLayers()
-            }
+        val (levelView, levelInput) = systemField(
+            layer.level.toString(), "", InputType.TYPE_CLASS_NUMBER, 3, true
+        ) { v ->
+            layer.level = v.toIntOrNull() ?: layer.level
         }
         row.addView(levelView, LinearLayout.LayoutParams(
             (36 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(levelInput, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
 
         // 名称
-        val nameView = plainText(
-            layer.name.ifEmpty { "图层名" },
-            if (layer.name.isEmpty()) Color.parseColor("#9A9384") else Color.parseColor("#1F1F1F")
-        ) {
-            askText("图层名", layer.name, 12) { v ->
-                layer.name = v
-                refreshLayers()
-            }
-        }
+        val (nameView, nameInput) = systemField(
+            layer.name, "图层名", InputType.TYPE_CLASS_TEXT, 12, false
+        ) { layer.name = it }
         row.addView(nameView, LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(nameInput, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
 
         // 类型（纯文字 + ↓）
         row.addView(plainText("${layer.type.label} ↓", Color.parseColor("#2B2B2B")) {
@@ -1095,8 +936,6 @@ class MainActivity : Activity() {
         private const val SCRIM = 0x59000000
         private const val REQUEST_LAYER_IMAGE = 1001
         private val RULE_COLOR = Color.parseColor("#9DB7D8")
-        private val INK = Color.parseColor("#1F1F1F")
-        private val INK_FRESH = Color.parseColor("#6B4E22")
     }
 
 }
