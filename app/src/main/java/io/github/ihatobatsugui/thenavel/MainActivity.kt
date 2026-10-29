@@ -371,7 +371,7 @@ class MainActivity : Activity() {
 
         content.addView(systemRow("船只代号", ShipStore.draft.code, "点击输入",
             InputType.TYPE_CLASS_TEXT, 24) { ShipStore.draft.code = it }, fieldParams(dp))
-        content.addView(systemRow("最高速度", ShipStore.draft.maxSpeed, "点击输入",
+        content.addView(systemRow("固定航速", ShipStore.draft.maxSpeed, "点击输入",
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 8, suffix = "knot") {
             ShipStore.draft.maxSpeed = it
         }, fieldParams(dp))
@@ -551,11 +551,11 @@ class MainActivity : Activity() {
             input.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
-            // 等输入法弹出后把这一行滚到可见区域，避免被键盘遮住
-            display.postDelayed({
-                val rect = android.graphics.Rect(0, 0, display.width, display.height)
-                display.requestRectangleOnScreen(rect, true)
-            }, 280)
+            // 输入法弹出 / 窗口缩放需要时间，多次重试把这一行滚到键盘上方
+            val rect = android.graphics.Rect(0, 0, display.width, display.height + 24)
+            listOf(120L, 260L, 420L, 600L, 820L, 1100L).forEach { delay ->
+                display.postDelayed({ display.requestRectangleOnScreen(rect, true) }, delay)
+            }
         }
         return display to input
     }
@@ -818,14 +818,28 @@ class MainActivity : Activity() {
 
     // ---------- 保存与载入 ----------
 
-    private fun saveShip(silent: Boolean = false) {
+    private fun saveShip(silent: Boolean = false, onSaved: (() -> Unit)? = null) {
         val draft = ShipStore.draft
         if (draft.code.isBlank()) {
             if (!silent) Toast.makeText(this, "请先填写船只代号", Toast.LENGTH_SHORT).show()
             return
         }
+        val duplicated = ShipStore.ships.any { it.code == draft.code }
+        if (duplicated && !silent) {
+            showPaperDialog("已存在同名船只", "存档里已有「${draft.code}」，是否覆盖？") { column, dialog, panel ->
+                column.addView(linkButton("覆盖") {
+                    closeDialog(panel, dialog)
+                    ShipStore.save(draft)
+                    Toast.makeText(this, "已覆盖 ${draft.code}", Toast.LENGTH_SHORT).show()
+                    onSaved?.invoke()
+                }, dialogButtonParams())
+                column.addView(linkButton("取消") { closeDialog(panel, dialog) }, dialogButtonParams())
+            }
+            return
+        }
         ShipStore.save(draft)
         if (!silent) Toast.makeText(this, "已保存 ${draft.code}", Toast.LENGTH_SHORT).show()
+        onSaved?.invoke()
     }
 
     // 软盘菜单：以弹窗形式盖在船只编辑器上，不离开编辑器
@@ -865,8 +879,7 @@ class MainActivity : Activity() {
         renderList()
 
         column.addView(linkButton("保存当前船只") {
-            saveShip()
-            renderList()
+            saveShip(onSaved = { renderList() })
         }, dialogButtonParams())
         column.addView(linkButton("关闭") { closeDialog(panel, dialog) }, dialogButtonParams())
 
