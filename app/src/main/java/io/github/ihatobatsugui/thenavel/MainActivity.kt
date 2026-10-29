@@ -395,11 +395,11 @@ class MainActivity : Activity() {
         content.addView(systemRow("船只代号", ShipStore.draft.code, "点击输入",
             InputType.TYPE_CLASS_TEXT, 24) { ShipStore.draft.code = it }, fieldParams(dp))
         content.addView(systemRow("固定航速", ShipStore.draft.maxSpeed, "点击输入",
-            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 8, suffix = "knot") {
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 8, suffix = "knots") {
             ShipStore.draft.maxSpeed = it
         }, fieldParams(dp))
         content.addView(systemRow("吨位", ShipStore.draft.tonnage, "点击输入",
-            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 10) {
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 10, suffix = "tons") {
             ShipStore.draft.tonnage = it
         }, fieldParams(dp))
         content.addView(systemRow("权重", ShipStore.draft.weight, "点击输入",
@@ -538,6 +538,7 @@ class MainActivity : Activity() {
         val inkColor = Color.parseColor("#1F1F1F")
         val display = InputDisplayView(this).apply {
             text = initial.ifEmpty { hint }
+            isPlaceholder = initial.isEmpty()
             textSize = 16f
             typeface = pixelFont
             includeFontPadding = false
@@ -564,6 +565,7 @@ class MainActivity : Activity() {
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
                 override fun afterTextChanged(s: Editable?) {
                     val value = s?.toString() ?: ""
+                    display.isPlaceholder = value.isEmpty()
                     display.text = if (value.isEmpty()) hint else value
                     display.setTextColor(if (value.isEmpty()) hintColor else inkColor)
                     onChange(value)
