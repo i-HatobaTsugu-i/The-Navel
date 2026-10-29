@@ -14,9 +14,10 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * 海面背景：蓝底 + 零散的白色碎沫，60Hz 刷新。
- * 泡沫由两层噪声算出的密度直接撒点（"一点一点"的碎沫），保留一帧淡出记忆，源移走后原地只变淡不重生。
- * 噪声在半分辨率网格上求值、逐格双线性采样，把每帧计算量降到 1/4，才跑得起 60fps。
+ * 海面背景：单色水面 + 成团的白色泡沫。
+ * 泡沫是一张浓度场：每帧沿风向平流（双线性采样）、带扩散、按时间常数衰减，
+ * 浓度由缓慢变化的噪声区域持续补充。因此泡沫团会边移动边被拉散、形状每刻都不同。
+ * 抖动阈值固定在每个格子上、不随时间重掷，所以高刷新率下也不会闪。
  */
 class OceanView @JvmOverloads constructor(
     context: Context,
@@ -29,9 +30,11 @@ class OceanView @JvmOverloads constructor(
 
     private var bitmap: Bitmap? = null
     private var pixels = IntArray(0)
-    private var foam = FloatArray(0)
-    private var patchGrid = FloatArray(0)
-    private var texGrid = FloatArray(0)
+    private var foamA = FloatArray(0)
+    private var foamB = FloatArray(0)
+    private var dither = FloatArray(0)
+    private var convGrid = FloatArray(0)
+    private var sourceBuf = FloatArray(0)
     private var gridCols = 0
     private var gridRows = 0
     private var frameIndex = 0
@@ -46,11 +49,13 @@ class OceanView @JvmOverloads constructor(
         bitmap?.recycle()
         bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)
         pixels = IntArray(cols * rows)
-        foam = FloatArray(cols * rows)
+        foamA = FloatArray(cols * rows)
+        foamB = FloatArray(cols * rows)
+        dither = FloatArray(cols * rows) { hash01(it % cols, it / cols, 7) }
+        sourceBuf = FloatArray(cols * rows)
         gridCols = cols / GRID_STEP + 2
         gridRows = rows / GRID_STEP + 2
-        patchGrid = FloatArray(gridCols * gridRows)
-        texGrid = FloatArray(gridCols * gridRows)
+        convGrid = FloatArray(gridCols * gridRows)
         frameIndex = 0
         startAt = SystemClock.uptimeMillis()
         lastFrameAt = 0L
@@ -71,67 +76,87 @@ class OceanView @JvmOverloads constructor(
     }
 
     private fun render(t: Float) {
-        val stamp = (t * 5).toInt()
-        updateGrids(t)
+        if (frameIndex % GRID_REFRESH == 0) updateConv(t)
+
+        if (frameIndex == 0) {
+            for (idx in foamA.indices) foamA[idx] = sourceBuf[idx] * 120f
+        } else {
+            var idx = 0
+            for (j in 0 until rows) {
+                for (i in 0 until cols) {
+                    val advected = sampleBilinear(foamA, i - WIND_X, j - WIND_Y)
+                    val left = foamA[j * cols + ((i - 1 + cols) % cols)]
+                    val right = foamA[j * cols + (i + 1) % cols]
+                    val up = foamA[((j - 1 + rows) % rows) * cols + i]
+                    val down = foamA[((j + 1) % rows) * cols + i]
+                    val average = (left + right + up + down) * 0.25f
+                    val diffused = advected + (average - advected) * DIFFUSE
+                    foamB[idx] = (diffused * DECAY + sourceBuf[idx]).coerceIn(0f, 1f)
+                    idx++
+                }
+            }
+            val swap = foamA
+            foamA = foamB
+            foamB = swap
+        }
 
         var index = 0
         for (j in 0 until rows) {
-            val water = WATER
-            val gy = j.toFloat() / GRID_STEP
-            val gy0 = gy.toInt()
-            val fy = gy - gy0
             for (i in 0 until cols) {
-                val gx = i.toFloat() / GRID_STEP
-                val gx0 = gx.toInt()
-                val fx = gx - gx0
-                val patch = sampleGrid(patchGrid, gx0, gy0, fx, fy)
-                val tex = sampleGrid(texGrid, gx0, gy0, fx, fy)
-
-                val mask = smoothStep(0.48f, 0.68f, patch)
-                val f = 0.55f * patch + 0.45f * tex
-                val source = max(0f, (f - 0.54f) / 0.20f) * mask
-
-                val previous = if (frameIndex == 0) {
-                    if (hash01(i, j, 4242) < SEED_RATE) 0.9f else 0f
-                } else {
-                    foam[index]
-                }
-                val value = max(source, previous * DECAY)
-                foam[index] = value
-
-                val r = hash01(i, j, stamp)
+                val value = foamA[index] * 1.35f
+                val d = dither[index]
                 pixels[index++] = when {
-                    r < value * 0.105f -> FOAM
-                    r < value * 0.20f -> blend(water, FOAM_DIM, 0.60f)
-                    else -> water
+                    d < value * 0.55f -> FOAM
+                    d < value * 0.95f -> blend(WATER, FOAM_DIM, 0.65f)
+                    else -> WATER
                 }
             }
         }
         frameIndex++
     }
 
-    // 噪声在半分辨率网格上求值
-    private fun updateGrids(t: Float) {
+    // 粗网格噪声 → 细网格源场，每 GRID_REFRESH 帧算一次
+    private fun updateConv(t: Float) {
         var gi = 0
         for (gj in 0 until gridRows) {
             val cy = gj * GRID_STEP
             for (gx in 0 until gridCols) {
                 val cx = gx * GRID_STEP
-                patchGrid[gi] = fbm(cx * 0.055f - t * 0.22f, cy * 0.045f + t * 0.05f, 1)
-                texGrid[gi] = fbm(cx * 0.130f - t * 0.5f, cy * 0.120f + t * 0.18f, 72)
-                gi++
+                convGrid[gi++] = fbm(cx * 0.045f - t * 0.10f, cy * 0.045f + t * 0.02f, 9)
+            }
+        }
+        var idx = 0
+        for (j in 0 until rows) {
+            val gy = (j.toFloat() / GRID_STEP).coerceIn(0f, (gridRows - 2).toFloat())
+            val y0 = gy.toInt()
+            val fy = gy - y0
+            for (i in 0 until cols) {
+                val gx = (i.toFloat() / GRID_STEP).coerceIn(0f, (gridCols - 2).toFloat())
+                val x0 = gx.toInt()
+                val fx = gx - x0
+                val base = y0 * gridCols + x0
+                val top = convGrid[base] + (convGrid[base + 1] - convGrid[base]) * fx
+                val bottom = convGrid[base + gridCols] +
+                    (convGrid[base + gridCols + 1] - convGrid[base + gridCols]) * fx
+                val value = top + (bottom - top) * fy
+                sourceBuf[idx++] = max(0f, value - 0.60f) * SOURCE_GAIN
             }
         }
     }
 
-    private fun sampleGrid(grid: FloatArray, x0: Int, y0: Int, fx: Float, fy: Float): Float {
-        val i00 = y0 * gridCols + x0
-        val i10 = i00 + 1
-        val i01 = i00 + gridCols
-        val i11 = i01 + 1
-        val top = grid[i00] + (grid[i10] - grid[i00]) * fx
-        val bottom = grid[i01] + (grid[i11] - grid[i01]) * fx
-        return top + (bottom - top) * fy
+    private fun sampleBilinear(source: FloatArray, fx: Float, fy: Float): Float {
+        var x = fx % cols
+        if (x < 0f) x += cols
+        val y = fy.coerceIn(0f, (rows - 1).toFloat())
+        val x0 = x.toInt()
+        val y0 = y.toInt()
+        val x1 = if (x0 + 1 >= cols) 0 else x0 + 1
+        val y1 = if (y0 + 1 >= rows) rows - 1 else y0 + 1
+        val tx = x - x0
+        val ty = y - y0
+        val top = source[y0 * cols + x0] + (source[y0 * cols + x1] - source[y0 * cols + x0]) * tx
+        val bottom = source[y1 * cols + x0] + (source[y1 * cols + x1] - source[y1 * cols + x0]) * tx
+        return top + (bottom - top) * ty
     }
 
     private fun hash01(ix: Int, iy: Int, s: Int): Float {
@@ -174,11 +199,6 @@ class OceanView @JvmOverloads constructor(
         return total / norm
     }
 
-    private fun smoothStep(edge0: Float, edge1: Float, x: Float): Float {
-        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
-        return t * t * (3f - 2f * t)
-    }
-
     private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
         (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt().coerceIn(0, 255),
         (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt().coerceIn(0, 255),
@@ -187,11 +207,14 @@ class OceanView @JvmOverloads constructor(
 
     companion object {
         private const val FRAME_MS = 16L
-        private const val GRID_STEP = 2
+        private const val GRID_STEP = 4
+        private const val GRID_REFRESH = 10
         private const val OCTAVES = 2
-        // 60fps 下按 ~0.55s 的时间常数换算出的每帧衰减
-        private const val DECAY = 0.97f
-        private const val SEED_RATE = 0.004f
+        private const val WIND_X = 0.16f
+        private const val WIND_Y = 0.03f
+        private const val DIFFUSE = 0.10f
+        private const val DECAY = 0.988f
+        private const val SOURCE_GAIN = 0.004f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
