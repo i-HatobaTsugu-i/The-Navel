@@ -21,25 +21,34 @@ object ShipDataGuard {
     const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
     const val MAX_IMAGE_DIM = 4096
 
-    fun text(raw: String): String =
-        raw.filter { it >= ' ' || it == '\t' }.take(MAX_TEXT)
+    fun text(raw: String): String {
+        val cleaned = raw.filter { it >= ' ' || it == '\t' }
+        return if (SecuritySettings.isOn(SecuritySettings.Check.COUNT)) cleaned.take(MAX_TEXT) else cleaned
+    }
 
-    fun coord(value: Float): Float =
-        if (value.isFinite()) value.coerceIn(-MAX_COORD, MAX_COORD) else 0f
+    fun coord(value: Float): Float {
+        if (!SecuritySettings.isOn(SecuritySettings.Check.NUMBER)) return value
+        return if (value.isFinite()) value.coerceIn(-MAX_COORD, MAX_COORD) else 0f
+    }
 
     /** 校验并清洗单艘船；代号为空视为不可用。 */
     fun sanitize(raw: Ship): Ship? {
         val code = text(raw.code).trim()
         if (code.isEmpty()) return null
 
-        val layers = raw.layers.take(MAX_LAYERS).mapIndexed { index, layer ->
+        val countOn = SecuritySettings.isOn(SecuritySettings.Check.COUNT)
+        val numberOn = SecuritySettings.isOn(SecuritySettings.Check.NUMBER)
+        val source = if (countOn) raw.layers.take(MAX_LAYERS) else raw.layers
+
+        val layers = source.mapIndexed { index, layer ->
             val bind = layer.bindTo
             ShipLayer(
                 name = text(layer.name),
                 type = layer.type,
-                level = layer.level.coerceIn(0, MAX_LEVEL),
-                bindTo = if (bind in 1..raw.layers.size && bind - 1 != index) bind else -1,
-                imagePath = if (layer.imagePath.length <= 512) layer.imagePath else "",
+                level = if (numberOn) layer.level.coerceIn(0, MAX_LEVEL) else layer.level,
+                bindTo = if (!numberOn) bind
+                else if (bind in 1..raw.layers.size && bind - 1 != index) bind else -1,
+                imagePath = if (countOn && layer.imagePath.length > 512) "" else layer.imagePath,
                 offsetX = coord(layer.offsetX),
                 offsetY = coord(layer.offsetY),
                 pivotX = coord(layer.pivotX),
@@ -48,8 +57,10 @@ object ShipDataGuard {
         }
 
         // 父链过长或成环的图层直接解绑，避免递归过深或渲染异常
-        layers.forEachIndexed { index, layer ->
-            if (layer.bindTo > 0 && chainDepth(layers, index) > MAX_DEPTH) layer.bindTo = -1
+        if (SecuritySettings.isOn(SecuritySettings.Check.DEPTH)) {
+            layers.forEachIndexed { index, layer ->
+                if (layer.bindTo > 0 && chainDepth(layers, index) > MAX_DEPTH) layer.bindTo = -1
+            }
         }
 
         return Ship(
@@ -93,17 +104,20 @@ object ShipDataGuard {
     fun decodeLayer(context: Context, path: String): Bitmap? {
         if (path.isBlank()) return null
         val dir = File(context.filesDir, "layers")
-        if (!isInside(dir, path)) return null
+        if (SecuritySettings.isOn(SecuritySettings.Check.PATH) && !isInside(dir, path)) return null
         val file = File(path)
-        if (!file.exists() || file.length() > MAX_IMAGE_BYTES) return null
+        if (!file.exists()) return null
+
+        val imageOn = SecuritySettings.isOn(SecuritySettings.Check.IMAGE)
+        if (imageOn && file.length() > MAX_IMAGE_BYTES) return null
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        if (bounds.outWidth > MAX_IMAGE_DIM || bounds.outHeight > MAX_IMAGE_DIM) return null
+        if (imageOn && (bounds.outWidth > MAX_IMAGE_DIM || bounds.outHeight > MAX_IMAGE_DIM)) return null
 
         val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 1024)
+            if (imageOn) inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 1024)
         }
         return runCatching { BitmapFactory.decodeFile(path, options) }.getOrNull()
     }

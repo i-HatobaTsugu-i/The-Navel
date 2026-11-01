@@ -83,7 +83,9 @@ object ShipStore {
     private fun load() {
         val f = file() ?: return
         if (!f.exists()) return
-        if (f.length() > ShipDataGuard.MAX_JSON_BYTES) {
+        if (SecuritySettings.isOn(SecuritySettings.Check.JSON_SIZE) &&
+            f.length() > ShipDataGuard.MAX_JSON_BYTES
+        ) {
             // 超大存档不解析，改名留档后用空存档启动，避免 OOM
             runCatching { f.renameTo(File(f.parentFile, "ships.oversize.json")) }
             return
@@ -93,7 +95,9 @@ object ShipStore {
             val root = JSONObject(f.readText())
             val array = root.optJSONArray("ships") ?: JSONArray()
             for (i in 0 until array.length()) {
-                if (parsed.size >= ShipDataGuard.MAX_SHIPS) break
+                if (SecuritySettings.isOn(SecuritySettings.Check.COUNT) &&
+                    parsed.size >= ShipDataGuard.MAX_SHIPS
+                ) break
                 val o = array.optJSONObject(i) ?: continue
                 // 单艘船解析失败不影响其它船
                 runCatching {
@@ -198,7 +202,9 @@ object ShipStore {
         if (existing >= 0) {
             ships[existing] = sanitized.duplicate()
         } else {
-            if (ships.size >= ShipDataGuard.MAX_SHIPS) return false
+            if (SecuritySettings.isOn(SecuritySettings.Check.COUNT) &&
+                ships.size >= ShipDataGuard.MAX_SHIPS
+            ) return false
             ships.add(sanitized.duplicate())
         }
         persist()

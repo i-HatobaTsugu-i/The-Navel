@@ -37,7 +37,7 @@ class MainActivity : Activity() {
 
     private val pixelFont by lazy { resources.getFont(R.font.unifont) }
 
-    private enum class Screen { MENU, EDITOR, SHIP_EDITOR, LOG, CREDITS }
+    private enum class Screen { MENU, EDITOR, SHIP_EDITOR, SETTINGS, LOG, CREDITS }
 
     private var screen = Screen.MENU
     private var layersBox: LinearLayout? = null
@@ -52,6 +52,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        SecuritySettings.init(this)
         ShipStore.init(this)
         CrashReport.install(this)
         showMenu()
@@ -114,6 +115,7 @@ class MainActivity : Activity() {
                     "退出" -> button.setOnClickListener { finishAffinity() }
                     "鸣谢" -> button.setOnClickListener { showCredits() }
                     "编辑器" -> button.setOnClickListener { showEditor() }
+                    "设置" -> button.setOnClickListener { showSettings() }
                 }
                 rowLayout.addView(button, LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -1333,6 +1335,106 @@ class MainActivity : Activity() {
         dialog.show()
         dialog.setCanceledOnTouchOutside(false)
         popIn(panel)
+    }
+
+    // ---------- 设置 / 安全性 ----------
+
+    private fun showSettings() {
+        screen = Screen.SETTINGS
+        val dp = resources.displayMetrics.density
+        val panelWidth = min(
+            (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
+            (420 * dp).toInt()
+        )
+        val panel = paperPanel()
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        listOf("安全性").forEach { label ->
+            column.addView(linkButton(label) { showSecuritySettings() })
+        }
+        column.addView(linkButton("返回") { leave { showMenu() } }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (12 * dp).toInt()
+        })
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        showPaperPage(panel, panelWidth) { showMenu() }
+    }
+
+    private fun showSecuritySettings() {
+        val dp = resources.displayMetrics.density
+        val panelWidth = min(
+            (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
+            (460 * dp).toInt()
+        )
+        val panel = paperPanel()
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(TextView(this).apply {
+            text = "安全性"
+            textSize = 24f
+            typeface = pixelFont
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#2B2B2B"))
+            setPadding(0, 0, 0, (6 * dp).toInt())
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        fun toggleRow(label: String, get: () -> Boolean, set: (Boolean) -> Unit) {
+            val stateText = TextView(this).apply {
+                text = if (get()) "开" else "关"
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#1F5FA8"))
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                setOnClickListener {
+                    set(!get())
+                    SecuritySettings.persist()
+                    stateText.text = if (get()) "开" else "关"
+                    stateText.setTextColor(Color.parseColor(if (get()) "#1F5FA8" else "#8A8A8A"))
+                }
+            }
+            row.addView(TextView(this).apply {
+                text = label
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#2B2B2B"))
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(stateText, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            column.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (12 * dp).toInt()
+            })
+        }
+
+        toggleRow("安全审查（总开关）", { SecuritySettings.enabled }) { SecuritySettings.enabled = it }
+        toggleRow("存档体积上限", { SecuritySettings.jsonSizeLimit }) { SecuritySettings.jsonSizeLimit = it }
+        toggleRow("数量与文本限额", { SecuritySettings.countLimit }) { SecuritySettings.countLimit = it }
+        toggleRow("数值范围校验", { SecuritySettings.numberCheck }) { SecuritySettings.numberCheck = it }
+        toggleRow("层级深度限制", { SecuritySettings.depthLimit }) { SecuritySettings.depthLimit = it }
+        toggleRow("图片尺寸/体积校验", { SecuritySettings.imageCheck }) { SecuritySettings.imageCheck = it }
+        toggleRow("图片路径白名单", { SecuritySettings.pathWhitelist }) { SecuritySettings.pathWhitelist = it }
+
+        column.addView(TextView(this).apply {
+            text = "关掉总开关等于不审查任何外来数据，可能导致闪退或存档损坏"
+            textSize = 12f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#8A6D3B"))
+            setPadding(0, (12 * dp).toInt(), 0, 0)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        column.addView(linkButton("返回") { showSettings() }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (14 * dp).toInt()
+        })
+
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        showPaperPage(panel, panelWidth) { showSettings() }
     }
 
     private fun menuButton(label: String): PixelButton = PixelButton(this).apply {
