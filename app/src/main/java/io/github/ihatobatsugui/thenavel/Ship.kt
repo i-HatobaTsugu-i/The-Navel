@@ -31,7 +31,12 @@ data class ShipLayer(
     // 绑定的图层序号（1 起），-1 表示不绑定
     var bindTo: Int = -1,
     // 导入的图层图片路径（复制到应用私有目录后的绝对路径）
-    var imagePath: String = ""
+    var imagePath: String = "",
+    // 图层位移与转轴（单位：dp，相对 432 设计画布）
+    var offsetX: Float = 0f,
+    var offsetY: Float = 0f,
+    var pivotX: Float = 0f,
+    var pivotY: Float = 0f
 )
 
 data class Ship(
@@ -96,7 +101,11 @@ object ShipStore {
                             }.getOrDefault(LayerType.HULL),
                             level = lo.optInt("level", 1),
                             bindTo = lo.optInt("bindTo", -1),
-                            imagePath = lo.optString("imagePath", "")
+                            imagePath = lo.optString("imagePath", ""),
+                            offsetX = lo.optDouble("offsetX", 0.0).toFloat(),
+                            offsetY = lo.optDouble("offsetY", 0.0).toFloat(),
+                            pivotX = lo.optDouble("pivotX", 0.0).toFloat(),
+                            pivotY = lo.optDouble("pivotY", 0.0).toFloat()
                         )
                     )
                 }
@@ -137,6 +146,10 @@ object ShipStore {
                     lo.put("level", layer.level)
                     lo.put("bindTo", layer.bindTo)
                     lo.put("imagePath", layer.imagePath)
+                    lo.put("offsetX", layer.offsetX.toDouble())
+                    lo.put("offsetY", layer.offsetY.toDouble())
+                    lo.put("pivotX", layer.pivotX.toDouble())
+                    lo.put("pivotY", layer.pivotY.toDouble())
                     layerArray.put(lo)
                 }
                 o.put("layers", layerArray)

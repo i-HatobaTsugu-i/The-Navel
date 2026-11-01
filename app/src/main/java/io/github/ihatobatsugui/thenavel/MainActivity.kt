@@ -844,25 +844,30 @@ class MainActivity : Activity() {
 
     // ---------- 图层 ----------
 
-    private fun orderedLayers(): List<Pair<Int, Boolean>> {
+    private fun orderedLayers(): List<Pair<Int, Int>> {
         val layers = ShipStore.draft.layers
-        val result = mutableListOf<Pair<Int, Boolean>>()
-        val isChild = BooleanArray(layers.size)
-        layers.indices.forEach { index ->
+        val result = mutableListOf<Pair<Int, Int>>()
+        val visited = BooleanArray(layers.size)
+
+        fun parentOf(index: Int): Int {
             val bind = layers[index].bindTo
-            if (bind in 1..layers.size && bind - 1 != index) isChild[index] = true
+            return if (bind in 1..layers.size && bind - 1 != index) bind - 1 else -1
         }
-        layers.indices.filter { !isChild[it] }
+
+        fun add(index: Int, depth: Int) {
+            if (index !in layers.indices || visited[index]) return
+            visited[index] = true
+            result.add(index to depth)
+            layers.indices
+                .filter { parentOf(it) == index }
+                .sortedBy { layers[it].level }
+                .forEach { add(it, depth + 1) }
+        }
+
+        layers.indices.filter { parentOf(it) < 0 }
             .sortedBy { layers[it].level }
-            .forEach { index ->
-                result.add(index to false)
-                layers.indices.filter { layers[it].bindTo == index + 1 }
-                    .sortedBy { layers[it].level }
-                    .forEach { child -> result.add(child to true) }
-            }
-        layers.indices.forEach { index ->
-            if (result.none { it.first == index }) result.add(index to false)
-        }
+            .forEach { add(it, 0) }
+        layers.indices.forEach { if (!visited[it]) add(it, 0) }
         return result
     }
 
@@ -870,19 +875,19 @@ class MainActivity : Activity() {
         val box = layersBox ?: return
         val dp = resources.displayMetrics.density
         box.removeAllViews()
-        orderedLayers().forEach { (index, child) ->
-            box.addView(layerRow(index, ShipStore.draft.layers[index], child, dp))
+        orderedLayers().forEach { (index, depth) ->
+            box.addView(layerRow(index, ShipStore.draft.layers[index], depth, dp))
         }
         shipPreview?.layers = ShipStore.draft.layers.toList()
     }
 
-    private fun layerRow(index: Int, layer: ShipLayer, child: Boolean, dp: Float): View {
+    private fun layerRow(index: Int, layer: ShipLayer, depth: Int, dp: Float): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+            setPadding((depth * 16 * dp).toInt(), (4 * dp).toInt(), 0, (4 * dp).toInt())
         }
-        if (child) {
+        if (depth > 0) {
             row.addView(BranchView(this), LinearLayout.LayoutParams(
                 (16 * dp).toInt(), (26 * dp).toInt()))
         }
@@ -926,6 +931,12 @@ class MainActivity : Activity() {
 
         // 导入图片
         row.addView(iconView(R.drawable.ic_download) { pickImage(index) },
+            LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()).apply {
+                marginStart = (6 * dp).toInt()
+            })
+
+        // 编辑图层（位移 / 转轴）
+        row.addView(iconView(R.drawable.ic_edit) { showLayerEditor(index) },
             LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()).apply {
                 marginStart = (6 * dp).toInt()
             })
@@ -1186,6 +1197,135 @@ class MainActivity : Activity() {
     }
 
     // ---------- 按钮与工具 ----------
+
+    // 图层编辑：位移（所有图层）+ 转轴中心（炮塔），带小预览
+    private fun showLayerEditor(index: Int) {
+        val layer = ShipStore.draft.layers.getOrNull(index) ?: return
+        val dp = resources.displayMetrics.density
+        val dialog = Dialog(this)
+        val panel = paperPanel()
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        column.addView(TextView(this).apply {
+            text = "图层编辑 · ${layer.name.ifBlank { layer.type.label }}"
+            textSize = 20f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val preview = ShipPreviewView(this).apply {
+            layers = ShipStore.draft.layers
+            setBackgroundColor(Color.parseColor("#E4DDCB"))
+        }
+        column.addView(preview, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (150 * dp).toInt()).apply {
+            topMargin = (8 * dp).toInt()
+        })
+
+        fun applyChange() {
+            preview.refresh()
+            shipPreview?.refresh()
+        }
+
+        fun addRow(label: String, get: () -> Float, set: (Float) -> Unit, step: Float) {
+            val ink = Color.parseColor("#1F1F1F")
+            val display = InputDisplayView(this).apply {
+                text = String.format(Locale.US, "%.0f", get())
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(ink)
+                isClickable = true
+                gravity = Gravity.END
+            }
+            val input = EditText(this).apply {
+                alpha = 0f
+                isSingleLine = true
+                inputType = InputType.TYPE_CLASS_NUMBER or
+                    InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+                imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+                setBackgroundColor(Color.TRANSPARENT)
+                filters = arrayOf(InputFilter.LengthFilter(10))
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        val raw = s?.toString() ?: ""
+                        display.text = raw
+                        display.isPlaceholder = raw.isEmpty()
+                        val v = raw.toFloatOrNull()
+                        if (v != null) {
+                            set(v)
+                            applyChange()
+                        }
+                    }
+                })
+            }
+            display.setOnClickListener {
+                input.setText(String.format(Locale.US, "%.0f", get()))
+                input.setSelection(input.text.length)
+                input.requestFocus()
+                display.setBlinking(true)
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
+            input.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) {
+                    display.setBlinking(false)
+                    display.isPlaceholder = false
+                    display.text = String.format(Locale.US, "%.0f", get())
+                }
+            }
+
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(TextView(this).apply {
+                text = label
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#2B2B2B"))
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(display, LinearLayout.LayoutParams(
+                (92 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
+            row.addView(plainText("−", Color.parseColor("#1F5FA8")) {
+                set(get() - step)
+                display.text = String.format(Locale.US, "%.0f", get())
+                applyChange()
+            }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(plainText("＋", Color.parseColor("#1F5FA8")) {
+                set(get() + step)
+                display.text = String.format(Locale.US, "%.0f", get())
+                applyChange()
+            }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            column.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (10 * dp).toInt()
+            })
+        }
+
+        addRow("位移 X", { layer.offsetX }, { layer.offsetX = it }, 4f)
+        addRow("位移 Y", { layer.offsetY }, { layer.offsetY = it }, 4f)
+        if (layer.type == LayerType.TURRET) {
+            addRow("转轴 X", { layer.pivotX }, { layer.pivotX = it }, 4f)
+            addRow("转轴 Y", { layer.pivotY }, { layer.pivotY = it }, 4f)
+        }
+
+        column.addView(linkButton("关闭") { closeDialog(panel, dialog) }, dialogButtonParams())
+
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        dialog.setContentView(panel)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            min((resources.displayMetrics.widthPixels - 60 * dp).toInt(), (480 * dp).toInt()),
+            LinearLayout.LayoutParams.WRAP_CONTENT)
+        dialog.show()
+        dialog.setCanceledOnTouchOutside(false)
+        popIn(panel)
+    }
 
     private fun menuButton(label: String): PixelButton = PixelButton(this).apply {
         text = label
