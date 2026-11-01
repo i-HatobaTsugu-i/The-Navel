@@ -137,21 +137,31 @@ class OceanView @JvmOverloads constructor(
         }
         var idx = 0
         for (j in 0 until rows) {
-            val gy = (j.toFloat() / GRID_STEP).coerceIn(0f, (gridRows - 2).toFloat())
-            val y0 = gy.toInt()
-            val fy = gy - y0
+            val gy = j.toFloat() / GRID_STEP
             for (i in 0 until cols) {
-                val gx = (i.toFloat() / GRID_STEP).coerceIn(0f, (gridCols - 2).toFloat())
-                val x0 = gx.toInt()
-                val fx = gx - x0
-                val base = y0 * gridCols + x0
-                val top = convGrid[base] + (convGrid[base + 1] - convGrid[base]) * fx
-                val bottom = convGrid[base + gridCols] +
-                    (convGrid[base + gridCols + 1] - convGrid[base + gridCols]) * fx
-                val value = top + (bottom - top) * fy
-                sourceBuf[idx++] = max(0f, value - OceanTuning.threshold) * OceanTuning.sourceGain
+                val gx = i.toFloat() / GRID_STEP
+                val lead = sampleConv(gx, gy)
+                // 减去“上游”的同一噪声，挖出尾迹，使泡沫呈新月形（前沿厚、尾部空）
+                val trail = sampleConv(gx - CRESCENT_X, gy - CRESCENT_Y)
+                val src = max(0f, lead - OceanTuning.threshold) -
+                    max(0f, trail - OceanTuning.threshold) * CRESCENT_CUT
+                sourceBuf[idx++] = max(0f, src) * OceanTuning.sourceGain
             }
         }
+    }
+
+    private fun sampleConv(gxRaw: Float, gyRaw: Float): Float {
+        val gx = gxRaw.coerceIn(0f, (gridCols - 2).toFloat())
+        val gy = gyRaw.coerceIn(0f, (gridRows - 2).toFloat())
+        val x0 = gx.toInt()
+        val y0 = gy.toInt()
+        val fx = gx - x0
+        val fy = gy - y0
+        val base = y0 * gridCols + x0
+        val top = convGrid[base] + (convGrid[base + 1] - convGrid[base]) * fx
+        val bottom = convGrid[base + gridCols] +
+            (convGrid[base + gridCols + 1] - convGrid[base + gridCols]) * fx
+        return top + (bottom - top) * fy
     }
 
     private fun sampleBilinear(source: FloatArray, fx: Float, fy: Float): Float {
@@ -222,8 +232,12 @@ class OceanView @JvmOverloads constructor(
         private const val OCTAVES = 2
         private const val CURL = 0.08f
         // 源区本身也随同一股风漂移，否则会在原地不断补泡沫、最终铺成均匀薄雾
-        private const val CONV_MOVE_X = 1.03f
-        private const val CONV_MOVE_Y = 0.19f
+        private const val CONV_MOVE_X = 0.33f
+        private const val CONV_MOVE_Y = 0.11f
+        // 新月形：减去上游偏移处的噪声，把泡沫团挖成弯月
+        private const val CRESCENT_X = 1.4f
+        private const val CRESCENT_Y = 0.2f
+        private const val CRESCENT_CUT = 0.9f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")

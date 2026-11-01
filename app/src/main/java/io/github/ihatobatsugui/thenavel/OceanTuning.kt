@@ -5,26 +5,26 @@ package io.github.ihatobatsugui.thenavel
  */
 object OceanTuning {
     // 风向漂移速度（格/帧）
-    var windX = 0.38f
-    var windY = 0.07f
+    var windX = 0.12f
+    var windY = 0.04f
     // 泡沫生成强度与发射带阈值（阈值越高越集聚、总量越少）
-    var sourceGain = 0.0040f
-    var threshold = 0.74f
+    var sourceGain = 0.05f
+    var threshold = 0.78f
     // 扩散与衰减
-    var diffuse = 0.002f
-    var decay = 0.995f
-    // 渲染：浓度上限与显示倍率（决定同样浓度下白点铺得多满）
-    var foamCap = 0.85f
-    var renderGain = 1.15f
+    var diffuse = 0f
+    var decay = 0.99f
+    // 渲染：浓度上限与显示倍率
+    var foamCap = 1.0f
+    var renderGain = 3.0f
 
     fun reset() {
-        windX = 0.38f
-        windY = 0.07f
-        sourceGain = 0.0040f
-        threshold = 0.74f
-        diffuse = 0.002f
-        decay = 0.995f
-        foamCap = 0.85f
-        renderGain = 1.15f
+        windX = 0.12f
+        windY = 0.04f
+        sourceGain = 0.05f
+        threshold = 0.78f
+        diffuse = 0f
+        decay = 0.99f
+        foamCap = 1.0f
+        renderGain = 3.0f
     }
 }
