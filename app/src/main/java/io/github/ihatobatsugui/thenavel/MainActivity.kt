@@ -411,9 +411,13 @@ class MainActivity : Activity() {
         }
 
         addRow("泡沫量", { OceanTuning.sourceGain },
-            { OceanTuning.sourceGain = it.coerceIn(0f, 0.02f) }, 0.0005f)
+            { OceanTuning.sourceGain = it.coerceIn(0f, 0.05f) }, 0.001f)
         addRow("发射阈值", { OceanTuning.threshold },
-            { OceanTuning.threshold = it.coerceIn(0.5f, 0.95f) }, 0.01f, "%.2f")
+            { OceanTuning.threshold = it.coerceIn(0.3f, 0.95f) }, 0.01f, "%.2f")
+        addRow("浓度上限", { OceanTuning.foamCap },
+            { OceanTuning.foamCap = it.coerceIn(0.2f, 1f) }, 0.05f, "%.2f")
+        addRow("显示倍率", { OceanTuning.renderGain },
+            { OceanTuning.renderGain = it.coerceIn(0.3f, 3f) }, 0.1f, "%.2f")
         addRow("速度 X", { OceanTuning.windX },
             { OceanTuning.windX = it.coerceIn(0f, 1.5f) }, 0.04f, "%.2f")
         addRow("速度 Y", { OceanTuning.windY },

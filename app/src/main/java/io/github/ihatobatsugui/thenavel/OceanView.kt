@@ -99,7 +99,8 @@ class OceanView @JvmOverloads constructor(
                     val down = foamA[((j + 1) % rows) * cols + i]
                     val average = (left + right + up + down) * 0.25f
                     val diffused = advected + (average - advected) * OceanTuning.diffuse
-                    val value = (diffused * OceanTuning.decay + sourceBuf[idx]).coerceIn(0f, 0.85f)
+                    val value = (diffused * OceanTuning.decay + sourceBuf[idx])
+                        .coerceIn(0f, OceanTuning.foamCap)
                     foamB[idx] = value
                     idx++
                 }
@@ -112,7 +113,7 @@ class OceanView @JvmOverloads constructor(
         var index = 0
         for (j in 0 until rows) {
             for (i in 0 until cols) {
-                val value = (foamA[index] * 1.15f).coerceIn(0f, 0.85f)
+                val value = (foamA[index] * OceanTuning.renderGain).coerceIn(0f, 1f)
                 val d = dither[index]
                 pixels[index++] = when {
                     d < value * 0.55f -> FOAM

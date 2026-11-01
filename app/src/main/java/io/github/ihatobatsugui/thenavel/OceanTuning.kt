@@ -13,6 +13,9 @@ object OceanTuning {
     // 扩散与衰减
     var diffuse = 0.002f
     var decay = 0.995f
+    // 渲染：浓度上限与显示倍率（决定同样浓度下白点铺得多满）
+    var foamCap = 0.85f
+    var renderGain = 1.15f
 
     fun reset() {
         windX = 0.38f
@@ -21,5 +24,7 @@ object OceanTuning {
         threshold = 0.74f
         diffuse = 0.002f
         decay = 0.995f
+        foamCap = 0.85f
+        renderGain = 1.15f
     }
 }
