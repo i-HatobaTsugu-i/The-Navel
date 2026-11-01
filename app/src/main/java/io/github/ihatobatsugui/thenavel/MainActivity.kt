@@ -375,7 +375,7 @@ class MainActivity : Activity() {
             valueText.isClickable = true
             valueText.setOnClickListener {
                 activeSet = set
-                activeRefresh = refresh
+                activeRefresh = { refresh() }
                 input.setText(String.format(Locale.US, format, get()).trim())
                 input.setSelection(input.text.length)
                 input.requestFocus()
