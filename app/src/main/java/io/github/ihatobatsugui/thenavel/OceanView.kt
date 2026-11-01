@@ -82,33 +82,30 @@ class OceanView @JvmOverloads constructor(
     private fun render(t: Float) {
         if (frameIndex % GRID_REFRESH == 0) updateConv(t)
 
-        if (frameIndex == 0) {
-            for (idx in foamA.indices) foamA[idx] = (sourceBuf[idx] * 120f).coerceAtMost(0.85f)
-        } else {
-            var idx = 0
-            for (j in 0 until rows) {
-                for (i in 0 until cols) {
-                    val advected = sampleBilinear(
-                        foamA,
-                        i - (OceanTuning.windX + curlX[idx] * CURL),
-                        j - (OceanTuning.windY + curlY[idx] * CURL)
-                    )
-                    val left = foamA[j * cols + ((i - 1 + cols) % cols)]
-                    val right = foamA[j * cols + (i + 1) % cols]
-                    val up = foamA[((j - 1 + rows) % rows) * cols + i]
-                    val down = foamA[((j + 1) % rows) * cols + i]
-                    val average = (left + right + up + down) * 0.25f
-                    val diffused = advected + (average - advected) * OceanTuning.diffuse
-                    val value = (diffused * OceanTuning.decay + sourceBuf[idx])
-                        .coerceIn(0f, OceanTuning.foamCap)
-                    foamB[idx] = value
-                    idx++
-                }
+        // 开局不撒任何泡沫，全部靠源场逐步生成
+        var idx = 0
+        for (j in 0 until rows) {
+            for (i in 0 until cols) {
+                val advected = sampleBilinear(
+                    foamA,
+                    i - (OceanTuning.windX + curlX[idx] * CURL),
+                    j - (OceanTuning.windY + curlY[idx] * CURL)
+                )
+                val left = foamA[j * cols + ((i - 1 + cols) % cols)]
+                val right = foamA[j * cols + (i + 1) % cols]
+                val up = foamA[((j - 1 + rows) % rows) * cols + i]
+                val down = foamA[((j + 1) % rows) * cols + i]
+                val average = (left + right + up + down) * 0.25f
+                val diffused = advected + (average - advected) * OceanTuning.diffuse
+                val value = (diffused * OceanTuning.decay + sourceBuf[idx])
+                    .coerceIn(0f, OceanTuning.foamCap)
+                foamB[idx] = value
+                idx++
             }
-            val swap = foamA
-            foamA = foamB
-            foamB = swap
         }
+        val swap = foamA
+        foamA = foamB
+        foamB = swap
 
         var index = 0
         for (j in 0 until rows) {

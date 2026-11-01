@@ -312,6 +312,7 @@ class MainActivity : Activity() {
     }
 
     // 开发者模式：实时调泡沫参数
+    // 开发者模式：实时调泡沫参数（数值可直接输入、可删空重填、不设上限）
     private fun showDevPanel() {
         val dp = resources.displayMetrics.density
         val dialog = Dialog(this)
@@ -324,29 +325,6 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#2B2B2B"))
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-        // 点数值可直接输入：隐藏输入框接系统键盘，输入后实时应用
-        var activeSet: ((Float) -> Unit)? = null
-        var activeRefresh: (() -> Unit)? = null
-        val input = EditText(this).apply {
-            alpha = 0f
-            isSingleLine = true
-            inputType = InputType.TYPE_CLASS_NUMBER or
-                InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
-            imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
-            setBackgroundColor(Color.TRANSPARENT)
-            filters = arrayOf(InputFilter.LengthFilter(10))
-            addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-                override fun afterTextChanged(s: Editable?) {
-                    val v = s?.toString()?.toFloatOrNull() ?: return
-                    activeSet?.invoke(v)
-                    activeRefresh?.invoke()
-                }
-            })
-        }
-        column.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
         column.addView(TextView(this).apply {
             text = "点数值可直接输入"
             textSize = 12f
@@ -363,25 +341,50 @@ class MainActivity : Activity() {
             step: Float,
             format: String = "%.4f"
         ) {
-            val valueText = TextView(this).apply {
+            val ink = Color.parseColor("#1F1F1F")
+            val display = InputDisplayView(this).apply {
+                text = String.format(Locale.US, format, get())
                 textSize = 16f
                 typeface = pixelFont
-                setTextColor(Color.parseColor("#1F1F1F"))
+                setTextColor(ink)
+                isClickable = true
+                gravity = Gravity.END
             }
-            fun refresh() {
-                valueText.text = String.format(Locale.US, format, get())
+            val input = EditText(this).apply {
+                alpha = 0f
+                isSingleLine = true
+                inputType = InputType.TYPE_CLASS_NUMBER or
+                    InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+                imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+                setBackgroundColor(Color.TRANSPARENT)
+                filters = arrayOf(InputFilter.LengthFilter(14))
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        val raw = s?.toString() ?: ""
+                        display.text = raw
+                        display.isPlaceholder = raw.isEmpty()
+                        raw.toFloatOrNull()?.let { set(it) }
+                    }
+                })
             }
-            refresh()
-            valueText.isClickable = true
-            valueText.setOnClickListener {
-                activeSet = set
-                activeRefresh = { refresh() }
+            display.setOnClickListener {
                 input.setText(String.format(Locale.US, format, get()).trim())
                 input.setSelection(input.text.length)
                 input.requestFocus()
+                display.setBlinking(true)
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
             }
+            input.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) {
+                    display.setBlinking(false)
+                    display.isPlaceholder = false
+                    display.text = String.format(Locale.US, format, get())
+                }
+            }
+
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -392,17 +395,16 @@ class MainActivity : Activity() {
                 typeface = pixelFont
                 setTextColor(Color.parseColor("#2B2B2B"))
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(valueText, LinearLayout.LayoutParams(
-                (76 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.END
-            })
+            row.addView(display, LinearLayout.LayoutParams(
+                (92 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
             row.addView(plainText("−", Color.parseColor("#1F5FA8")) {
                 set(get() - step)
-                refresh()
+                display.text = String.format(Locale.US, format, get())
             }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             row.addView(plainText("＋", Color.parseColor("#1F5FA8")) {
                 set(get() + step)
-                refresh()
+                display.text = String.format(Locale.US, format, get())
             }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             column.addView(row, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -411,21 +413,21 @@ class MainActivity : Activity() {
         }
 
         addRow("泡沫量", { OceanTuning.sourceGain },
-            { OceanTuning.sourceGain = it.coerceIn(0f, 0.05f) }, 0.001f)
+            { OceanTuning.sourceGain = it.coerceAtLeast(0f) }, 0.001f)
         addRow("发射阈值", { OceanTuning.threshold },
-            { OceanTuning.threshold = it.coerceIn(0.3f, 0.95f) }, 0.01f, "%.2f")
+            { OceanTuning.threshold = it }, 0.01f, "%.2f")
         addRow("浓度上限", { OceanTuning.foamCap },
-            { OceanTuning.foamCap = it.coerceIn(0.2f, 1f) }, 0.05f, "%.2f")
+            { OceanTuning.foamCap = it.coerceAtLeast(0f) }, 0.05f, "%.2f")
         addRow("显示倍率", { OceanTuning.renderGain },
-            { OceanTuning.renderGain = it.coerceIn(0.3f, 3f) }, 0.1f, "%.2f")
+            { OceanTuning.renderGain = it.coerceAtLeast(0f) }, 0.1f, "%.2f")
         addRow("速度 X", { OceanTuning.windX },
-            { OceanTuning.windX = it.coerceIn(0f, 1.5f) }, 0.04f, "%.2f")
+            { OceanTuning.windX = it }, 0.04f, "%.2f")
         addRow("速度 Y", { OceanTuning.windY },
-            { OceanTuning.windY = it.coerceIn(0f, 0.5f) }, 0.01f, "%.2f")
+            { OceanTuning.windY = it }, 0.01f, "%.2f")
         addRow("扩散", { OceanTuning.diffuse },
-            { OceanTuning.diffuse = it.coerceIn(0f, 0.05f) }, 0.001f)
+            { OceanTuning.diffuse = it.coerceAtLeast(0f) }, 0.001f)
         addRow("衰减", { OceanTuning.decay },
-            { OceanTuning.decay = it.coerceIn(0.9f, 0.999f) }, 0.001f)
+            { OceanTuning.decay = it }, 0.001f)
 
         column.addView(linkButton("重置") {
             OceanTuning.reset()
@@ -439,7 +441,7 @@ class MainActivity : Activity() {
         dialog.setContentView(panel)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialog.window?.setLayout(
-            min((resources.displayMetrics.widthPixels - 60 * dp).toInt(), (460 * dp).toInt()),
+            min((resources.displayMetrics.widthPixels - 60 * dp).toInt(), (480 * dp).toInt()),
             LinearLayout.LayoutParams.WRAP_CONTENT)
         dialog.show()
         dialog.setCanceledOnTouchOutside(false)
