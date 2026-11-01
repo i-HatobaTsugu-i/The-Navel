@@ -232,9 +232,9 @@ class OceanView @JvmOverloads constructor(
         private const val CONV_MOVE_X = 0.33f
         private const val CONV_MOVE_Y = 0.11f
         // 新月形：减去上游偏移处的噪声，把泡沫团挖成弯月
-        private const val CRESCENT_X = 1.4f
-        private const val CRESCENT_Y = 0.2f
-        private const val CRESCENT_CUT = 0.9f
+        private const val CRESCENT_X = 3.2f
+        private const val CRESCENT_Y = 0.4f
+        private const val CRESCENT_CUT = 0.78f
         private val WATER = Color.parseColor("#1E5473")
         private val FOAM = Color.parseColor("#E6F1F6")
         private val FOAM_DIM = Color.parseColor("#9DBECE")
