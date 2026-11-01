@@ -325,6 +325,37 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
+        // 点数值可直接输入：隐藏输入框接系统键盘，输入后实时应用
+        var activeSet: ((Float) -> Unit)? = null
+        var activeRefresh: (() -> Unit)? = null
+        val input = EditText(this).apply {
+            alpha = 0f
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_NUMBER or
+                InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+            imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+            setBackgroundColor(Color.TRANSPARENT)
+            filters = arrayOf(InputFilter.LengthFilter(10))
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    val v = s?.toString()?.toFloatOrNull() ?: return
+                    activeSet?.invoke(v)
+                    activeRefresh?.invoke()
+                }
+            })
+        }
+        column.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
+        column.addView(TextView(this).apply {
+            text = "点数值可直接输入"
+            textSize = 12f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#5A5A5A"))
+            setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
         fun addRow(
             label: String,
             get: () -> Float,
@@ -341,6 +372,16 @@ class MainActivity : Activity() {
                 valueText.text = String.format(Locale.US, format, get())
             }
             refresh()
+            valueText.isClickable = true
+            valueText.setOnClickListener {
+                activeSet = set
+                activeRefresh = refresh
+                input.setText(String.format(Locale.US, format, get()).trim())
+                input.setSelection(input.text.length)
+                input.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
