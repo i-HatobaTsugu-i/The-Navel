@@ -79,16 +79,13 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
         }, LinearLayout.LayoutParams((56 * dp).toInt(), (56 * dp).toInt()))
 
-        header.addView(TextView(this).apply {
-            text = "The Navel"
-            textSize = 48f
-            typeface = pixelFont
-            letterSpacing = 0.18f
-            gravity = Gravity.CENTER_VERTICAL
-            setTextColor(Color.parseColor("#F2EAD3"))
+        header.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_title)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
         }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = (12 * dp).toInt()
+            LinearLayout.LayoutParams.WRAP_CONTENT, (44 * dp).toInt()).apply {
+            marginStart = (10 * dp).toInt()
         })
         root.addView(header, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
