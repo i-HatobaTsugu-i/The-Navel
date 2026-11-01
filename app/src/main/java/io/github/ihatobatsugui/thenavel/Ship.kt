@@ -83,34 +83,41 @@ object ShipStore {
     private fun load() {
         val f = file() ?: return
         if (!f.exists()) return
+        if (f.length() > ShipDataGuard.MAX_JSON_BYTES) {
+            // 超大存档不解析，改名留档后用空存档启动，避免 OOM
+            runCatching { f.renameTo(File(f.parentFile, "ships.oversize.json")) }
+            return
+        }
+        val parsed = mutableListOf<Ship>()
         runCatching {
             val root = JSONObject(f.readText())
             val array = root.optJSONArray("ships") ?: JSONArray()
-            ships.clear()
             for (i in 0 until array.length()) {
+                if (parsed.size >= ShipDataGuard.MAX_SHIPS) break
                 val o = array.optJSONObject(i) ?: continue
-                val layers = mutableListOf<ShipLayer>()
-                val layerArray = o.optJSONArray("layers") ?: JSONArray()
-                for (k in 0 until layerArray.length()) {
-                    val lo = layerArray.optJSONObject(k) ?: continue
-                    layers.add(
-                        ShipLayer(
-                            name = lo.optString("name", ""),
-                            type = runCatching {
-                                LayerType.valueOf(lo.optString("type", LayerType.HULL.name))
-                            }.getOrDefault(LayerType.HULL),
-                            level = lo.optInt("level", 1),
-                            bindTo = lo.optInt("bindTo", -1),
-                            imagePath = lo.optString("imagePath", ""),
-                            offsetX = lo.optDouble("offsetX", 0.0).toFloat(),
-                            offsetY = lo.optDouble("offsetY", 0.0).toFloat(),
-                            pivotX = lo.optDouble("pivotX", 0.0).toFloat(),
-                            pivotY = lo.optDouble("pivotY", 0.0).toFloat()
+                // 单艘船解析失败不影响其它船
+                runCatching {
+                    val layers = mutableListOf<ShipLayer>()
+                    val layerArray = o.optJSONArray("layers") ?: JSONArray()
+                    for (k in 0 until minOf(layerArray.length(), ShipDataGuard.MAX_LAYERS)) {
+                        val lo = layerArray.optJSONObject(k) ?: continue
+                        layers.add(
+                            ShipLayer(
+                                name = lo.optString("name", ""),
+                                type = runCatching {
+                                    LayerType.valueOf(lo.optString("type", LayerType.HULL.name))
+                                }.getOrDefault(LayerType.HULL),
+                                level = lo.optInt("level", 1),
+                                bindTo = lo.optInt("bindTo", -1),
+                                imagePath = lo.optString("imagePath", ""),
+                                offsetX = lo.optDouble("offsetX", 0.0).toFloat(),
+                                offsetY = lo.optDouble("offsetY", 0.0).toFloat(),
+                                pivotX = lo.optDouble("pivotX", 0.0).toFloat(),
+                                pivotY = lo.optDouble("pivotY", 0.0).toFloat()
+                            )
                         )
-                    )
-                }
-                ships.add(
-                    Ship(
+                    }
+                    val ship = Ship(
                         code = o.optString("code", ""),
                         maxSpeed = o.optString("maxSpeed", ""),
                         tonnage = o.optString("tonnage", ""),
@@ -120,9 +127,12 @@ object ShipStore {
                         layers = layers,
                         modifiedAt = normalizeDate(o.optString("modifiedAt", ""))
                     )
-                )
+                    ShipDataGuard.sanitize(ship)?.let { parsed.add(it) }
+                }
             }
         }
+        ships.clear()
+        ships.addAll(parsed)
     }
 
     private fun persist() {
@@ -155,7 +165,13 @@ object ShipStore {
                 o.put("layers", layerArray)
                 array.put(o)
             }
-            f.writeText(JSONObject().put("ships", array).toString())
+            val json = JSONObject().put("ships", array).toString()
+            val tmp = File(f.parentFile, "$FILE_NAME.tmp")
+            tmp.writeText(json)
+            if (!tmp.renameTo(f)) {
+                f.delete()
+                tmp.renameTo(f)
+            }
         }
     }
 
@@ -175,12 +191,18 @@ object ShipStore {
         }.getOrDefault(raw)
     }
 
-    fun save(draft: Ship) {
-        if (draft.code.isBlank()) return
-        draft.modifiedAt = now()
-        val existing = ships.indexOfFirst { it.code == draft.code }
-        if (existing >= 0) ships[existing] = draft.duplicate() else ships.add(draft.duplicate())
+    fun save(draft: Ship): Boolean {
+        val sanitized = ShipDataGuard.sanitize(draft) ?: return false
+        sanitized.modifiedAt = now()
+        val existing = ships.indexOfFirst { it.code == sanitized.code }
+        if (existing >= 0) {
+            ships[existing] = sanitized.duplicate()
+        } else {
+            if (ships.size >= ShipDataGuard.MAX_SHIPS) return false
+            ships.add(sanitized.duplicate())
+        }
         persist()
+        return true
     }
 
     fun delete(ship: Ship) {

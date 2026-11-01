@@ -1030,15 +1030,23 @@ class MainActivity : Activity() {
             showPaperDialog("已存在同名船只", "存档里已有「${draft.code}」，是否覆盖？") { column, dialog, panel ->
                 column.addView(linkButton("覆盖") {
                     closeDialog(panel, dialog)
-                    ShipStore.save(draft)
-                    Toast.makeText(this, "已覆盖 ${draft.code}", Toast.LENGTH_SHORT).show()
-                    onSaved?.invoke()
+                    val ok = ShipStore.save(draft)
+                    if (ok) {
+                        Toast.makeText(this, "已覆盖 ${draft.code}", Toast.LENGTH_SHORT).show()
+                        onSaved?.invoke()
+                    } else {
+                        Toast.makeText(this, "保存失败：存档已满", Toast.LENGTH_SHORT).show()
+                    }
                 }, dialogButtonParams())
                 column.addView(linkButton("取消") { closeDialog(panel, dialog) }, dialogButtonParams())
             }
             return
         }
-        ShipStore.save(draft)
+        val saved = ShipStore.save(draft)
+        if (!saved) {
+            if (!silent) Toast.makeText(this, "保存失败：存档已满", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!silent) Toast.makeText(this, "已保存 ${draft.code}", Toast.LENGTH_SHORT).show()
         onSaved?.invoke()
     }

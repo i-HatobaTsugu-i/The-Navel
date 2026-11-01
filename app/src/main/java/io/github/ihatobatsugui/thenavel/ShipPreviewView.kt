@@ -2,7 +2,6 @@ package io.github.ihatobatsugui.thenavel
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -47,12 +46,9 @@ class ShipPreviewView @JvmOverloads constructor(
         val unit = minOf(w, h) / 432f
 
         layers.filter { it.imagePath.isNotBlank() }.forEach { layer ->
-            if (!cache.containsKey(layer.imagePath)) {
-                cache[layer.imagePath] = runCatching {
-                    BitmapFactory.decodeFile(layer.imagePath)
-                }.getOrNull()
-            }
-            val bitmap = cache[layer.imagePath] ?: return@forEach
+            val bitmap = cache.getOrPut(layer.imagePath) {
+                ShipDataGuard.decodeLayer(context, layer.imagePath)
+            } ?: return@forEach
             val scale = minOf(w * 0.9f / bitmap.width, h * 0.9f / bitmap.height)
             val dw = bitmap.width * scale
             val dh = bitmap.height * scale
