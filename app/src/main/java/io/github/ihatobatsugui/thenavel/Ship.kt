@@ -84,7 +84,7 @@ object ShipStore {
         val f = file() ?: return
         if (!f.exists()) return
         if (SecuritySettings.isOn(SecuritySettings.Check.JSON_SIZE) &&
-            f.length() > ShipDataGuard.MAX_JSON_BYTES
+            f.length() > SecuritySettings.jsonBytes()
         ) {
             // 超大存档不解析，改名留档后用空存档启动，避免 OOM
             runCatching { f.renameTo(File(f.parentFile, "ships.oversize.json")) }
@@ -96,14 +96,14 @@ object ShipStore {
             val array = root.optJSONArray("ships") ?: JSONArray()
             for (i in 0 until array.length()) {
                 if (SecuritySettings.isOn(SecuritySettings.Check.COUNT) &&
-                    parsed.size >= ShipDataGuard.MAX_SHIPS
+                    parsed.size >= SecuritySettings.maxShips.coerceAtLeast(1)
                 ) break
                 val o = array.optJSONObject(i) ?: continue
                 // 单艘船解析失败不影响其它船
                 runCatching {
                     val layers = mutableListOf<ShipLayer>()
                     val layerArray = o.optJSONArray("layers") ?: JSONArray()
-                    for (k in 0 until minOf(layerArray.length(), ShipDataGuard.MAX_LAYERS)) {
+                    for (k in 0 until minOf(layerArray.length(), SecuritySettings.maxLayers.coerceAtLeast(1))) {
                         val lo = layerArray.optJSONObject(k) ?: continue
                         layers.add(
                             ShipLayer(
@@ -203,7 +203,7 @@ object ShipStore {
             ships[existing] = sanitized.duplicate()
         } else {
             if (SecuritySettings.isOn(SecuritySettings.Check.COUNT) &&
-                ships.size >= ShipDataGuard.MAX_SHIPS
+                ships.size >= SecuritySettings.maxShips.coerceAtLeast(1)
             ) return false
             ships.add(sanitized.duplicate())
         }

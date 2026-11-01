@@ -858,6 +858,7 @@ class MainActivity : Activity() {
 
         fun add(index: Int, depth: Int) {
             if (index !in layers.indices || visited[index]) return
+            if (depth > SecuritySettings.maxDepth.coerceAtLeast(1)) return
             visited[index] = true
             result.add(index to depth)
             layers.indices
@@ -984,12 +985,30 @@ class MainActivity : Activity() {
         val target = File(dir, "layer_${System.currentTimeMillis()}.png")
         runCatching {
             contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n <= 0) break
+                        total += n
+                        if (total > SecuritySettings.imageBytes()) {
+                            throw IllegalStateException("图片过大")
+                        }
+                        output.write(buffer, 0, n)
+                    }
+                }
             }
         }.onSuccess {
+            if (ShipDataGuard.decodeLayer(this, target.absolutePath) == null) {
+                target.delete()
+                Toast.makeText(this, "图片过大或格式不支持", Toast.LENGTH_SHORT).show()
+                return
+            }
             ShipStore.draft.layers[index].imagePath = target.absolutePath
             refreshLayers()
         }.onFailure {
+            target.delete()
             Toast.makeText(this, "导入图片失败", Toast.LENGTH_SHORT).show()
         }
     }
@@ -1002,7 +1021,8 @@ class MainActivity : Activity() {
         val labels = mutableListOf("无")
         val values = mutableListOf(-1)
         layers.forEachIndexed { other, item ->
-            if (other != index) {
+            // 不能绑到自己，也不能绑到自己的子孙图层（会形成环）
+            if (other != index && !ShipDataGuard.isInSubtree(layers, index, other)) {
                 val name = item.name.ifBlank { item.type.label }
                 labels.add("图层 ${other + 1}：$name")
                 values.add(other + 1)
@@ -1364,7 +1384,7 @@ class MainActivity : Activity() {
         val dp = resources.displayMetrics.density
         val panelWidth = min(
             (resources.displayMetrics.widthPixels - 48 * dp).toInt(),
-            (460 * dp).toInt()
+            (480 * dp).toInt()
         )
         val panel = paperPanel()
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -1378,54 +1398,188 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        fun toggleRow(label: String, get: () -> Boolean, set: (Boolean) -> Unit) {
-            val stateText = TextView(this).apply {
+        fun noteView(text: String): View = TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#7A7468"))
+            setPadding(0, (2 * dp).toInt(), 0, 0)
+        }
+
+        fun stateView(get: () -> Boolean, set: (Boolean) -> Unit): TextView =
+            TextView(this).apply {
                 text = if (get()) "开" else "关"
                 textSize = 16f
                 typeface = pixelFont
-                setTextColor(Color.parseColor("#1F5FA8"))
-            }
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                setTextColor(Color.parseColor(if (get()) "#1F5FA8" else "#8A8A8A"))
                 isClickable = true
+                setPadding((10 * dp).toInt(), 0, 0, 0)
                 setOnClickListener {
                     set(!get())
                     SecuritySettings.persist()
-                    stateText.text = if (get()) "开" else "关"
-                    stateText.setTextColor(Color.parseColor(if (get()) "#1F5FA8" else "#8A8A8A"))
+                    text = if (get()) "开" else "关"
+                    setTextColor(Color.parseColor(if (get()) "#1F5FA8" else "#8A8A8A"))
                 }
             }
-            row.addView(TextView(this).apply {
-                text = label
-                textSize = 16f
-                typeface = pixelFont
-                setTextColor(Color.parseColor("#2B2B2B"))
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(stateText, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            column.addView(row, LinearLayout.LayoutParams(
+
+        fun labelView(text: String, weight: Float): TextView = TextView(this).apply {
+            this.text = text
+            textSize = 16f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight)
+        }
+
+        fun toggleRow(label: String, note: String, get: () -> Boolean, set: (Boolean) -> Unit) {
+            val top = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(labelView(label, 1f))
+            top.addView(stateView(get, set))
+            val block = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            block.addView(top)
+            block.addView(noteView(note))
+            column.addView(block, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (12 * dp).toInt()
             })
         }
 
-        toggleRow("安全审查（总开关）", { SecuritySettings.enabled }) { SecuritySettings.enabled = it }
-        toggleRow("存档体积上限", { SecuritySettings.jsonSizeLimit }) { SecuritySettings.jsonSizeLimit = it }
-        toggleRow("数量与文本限额", { SecuritySettings.countLimit }) { SecuritySettings.countLimit = it }
-        toggleRow("数值范围校验", { SecuritySettings.numberCheck }) { SecuritySettings.numberCheck = it }
-        toggleRow("层级深度限制", { SecuritySettings.depthLimit }) { SecuritySettings.depthLimit = it }
-        toggleRow("图片尺寸/体积校验", { SecuritySettings.imageCheck }) { SecuritySettings.imageCheck = it }
-        toggleRow("图片路径白名单", { SecuritySettings.pathWhitelist }) { SecuritySettings.pathWhitelist = it }
+        fun numberRow(
+            label: String,
+            note: String,
+            unit: String,
+            getValue: () -> Int,
+            setValue: (Int) -> Unit,
+            getOn: () -> Boolean,
+            setOn: (Boolean) -> Unit
+        ) {
+            val top = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(labelView(label, 1f))
 
-        column.addView(TextView(this).apply {
-            text = "关掉总开关等于不审查任何外来数据，可能导致闪退或存档损坏"
-            textSize = 12f
-            typeface = pixelFont
-            setTextColor(Color.parseColor("#8A6D3B"))
-            setPadding(0, (12 * dp).toInt(), 0, 0)
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            val display = InputDisplayView(this).apply {
+                text = "${getValue()} $unit"
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#1F1F1F"))
+                gravity = Gravity.END
+                isClickable = true
+            }
+            val input = EditText(this).apply {
+                alpha = 0f
+                isSingleLine = true
+                inputType = InputType.TYPE_CLASS_NUMBER
+                imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+                setBackgroundColor(Color.TRANSPARENT)
+                filters = arrayOf(InputFilter.LengthFilter(9))
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        val raw = s?.toString() ?: ""
+                        display.text = if (raw.isEmpty()) "" else "$raw $unit"
+                        display.isPlaceholder = raw.isEmpty()
+                        raw.toIntOrNull()?.let { value ->
+                            setValue(value)
+                            SecuritySettings.persist()
+                        }
+                    }
+                })
+            }
+            display.setOnClickListener {
+                input.setText(getValue().toString())
+                input.setSelection(input.text.length)
+                input.requestFocus()
+                display.setBlinking(true)
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
+            input.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) {
+                    display.setBlinking(false)
+                    display.isPlaceholder = false
+                    display.text = "${getValue()} $unit"
+                    SecuritySettings.persist()
+                }
+            }
+
+            top.addView(display, LinearLayout.LayoutParams(
+                (104 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            top.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
+            top.addView(stateView(getOn, setOn))
+
+            val block = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            block.addView(top)
+            block.addView(noteView(note))
+            column.addView(block, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (12 * dp).toInt()
+            })
+        }
+
+        toggleRow(
+            "安全审查（总开关）",
+            "关闭后完全不再检查外来船只数据，任何异常数据都可能让游戏闪退或损坏存档。",
+            { SecuritySettings.enabled }
+        ) { SecuritySettings.enabled = it }
+
+        numberRow(
+            "存档体积上限", "读取 ships.json 前先看文件大小，超过就不解析，改名留档后以空存档启动，避免把超大文件读进内存。",
+            "MB", { SecuritySettings.maxJsonMb }, { SecuritySettings.maxJsonMb = it },
+            { SecuritySettings.jsonSizeLimit }
+        ) { SecuritySettings.jsonSizeLimit = it }
+
+        numberRow(
+            "船只数量上限", "存档里最多保留多少艘船；超出后新船无法保存，多出来的条目在读取时被丢弃。",
+            "艘", { SecuritySettings.maxShips }, { SecuritySettings.maxShips = it },
+            { SecuritySettings.countLimit }
+        ) { SecuritySettings.countLimit = it }
+
+        numberRow(
+            "图层数量上限", "单艘船最多读取多少个图层，防止几万个图层把列表和渲染拖死。",
+            "个", { SecuritySettings.maxLayers }, { SecuritySettings.maxLayers = it },
+            { SecuritySettings.countLimit }
+        ) { SecuritySettings.countLimit = it }
+
+        numberRow(
+            "文本长度上限", "代号、吨位、时期等文字字段的最大字符数，超长部分直接截断。",
+            "字", { SecuritySettings.maxTextLen }, { SecuritySettings.maxTextLen = it },
+            { SecuritySettings.countLimit }
+        ) { SecuritySettings.countLimit = it }
+
+        numberRow(
+            "坐标范围上限", "图层位移与转轴允许的最大绝对值，超出按边界值处理，NaN / Infinity 归零，避免非法坐标进入绘图。",
+            "", { SecuritySettings.maxCoord }, { SecuritySettings.maxCoord = it },
+            { SecuritySettings.numberCheck }
+        ) { SecuritySettings.numberCheck = it }
+
+        numberRow(
+            "层级深度上限", "图层父链的最多层数，超过就自动解绑，防止递归排序把调用栈撑爆。",
+            "层", { SecuritySettings.maxDepth }, { SecuritySettings.maxDepth = it },
+            { SecuritySettings.depthLimit }
+        ) { SecuritySettings.depthLimit = it }
+
+        numberRow(
+            "图片体积上限", "单张图层图片文件的字节上限，超过就不解码，直接跳过该图层。",
+            "MB", { SecuritySettings.maxImageMb }, { SecuritySettings.maxImageMb = it },
+            { SecuritySettings.imageCheck }
+        ) { SecuritySettings.imageCheck = it }
+
+        numberRow(
+            "图片单边上限", "解码前先读图片宽高，任一边超过该值就拒绝，避免解码超大图时内存爆掉。",
+            "px", { SecuritySettings.maxImageDim }, { SecuritySettings.maxImageDim = it },
+            { SecuritySettings.imageCheck }
+        ) { SecuritySettings.imageCheck = it }
+
+        toggleRow(
+            "图片路径白名单",
+            "只允许加载应用私有目录 filesDir/layers 下的图片，防止数据里把路径指向系统文件或其它应用的数据。",
+            { SecuritySettings.pathWhitelist }
+        ) { SecuritySettings.pathWhitelist = it }
 
         column.addView(linkButton("返回") { showSettings() }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {

@@ -7,48 +7,45 @@ import java.io.File
 
 /**
  * 外来船只数据的防线：一切从磁盘读回来的内容都当作不可信数据。
- * 只做"限额 + 清洗 + 丢弃非法项"，不做加密或签名。
+ * 阈值来自 SecuritySettings（可在「设置 → 安全性」里改或关掉对应检查）。
+ * 唯一不受开关影响的是"环形绑定"——它属于数据本身的错误，必须断开。
  */
 object ShipDataGuard {
 
-    const val MAX_SHIPS = 300
-    const val MAX_LAYERS = 96
-    const val MAX_TEXT = 64
-    const val MAX_LEVEL = 999
-    const val MAX_DEPTH = 8
-    const val MAX_COORD = 4096f
-    const val MAX_JSON_BYTES = 8L * 1024 * 1024
-    const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
-    const val MAX_IMAGE_DIM = 4096
-
     fun text(raw: String): String {
         val cleaned = raw.filter { it >= ' ' || it == '\t' }
-        return if (SecuritySettings.isOn(SecuritySettings.Check.COUNT)) cleaned.take(MAX_TEXT) else cleaned
+        return if (SecuritySettings.isOn(SecuritySettings.Check.COUNT)) {
+            cleaned.take(SecuritySettings.maxTextLen.coerceAtLeast(1))
+        } else {
+            cleaned
+        }
     }
 
     fun coord(value: Float): Float {
         if (!SecuritySettings.isOn(SecuritySettings.Check.NUMBER)) return value
-        return if (value.isFinite()) value.coerceIn(-MAX_COORD, MAX_COORD) else 0f
+        val limit = SecuritySettings.coord()
+        return if (value.isFinite()) value.coerceIn(-limit, limit) else 0f
     }
 
-    /** 校验并清洗单艘船；代号为空视为不可用。 */
+    /** 校验并清洗单艘船；代号为空或结构不可用返回 null。 */
     fun sanitize(raw: Ship): Ship? {
         val code = text(raw.code).trim()
         if (code.isEmpty()) return null
 
         val countOn = SecuritySettings.isOn(SecuritySettings.Check.COUNT)
         val numberOn = SecuritySettings.isOn(SecuritySettings.Check.NUMBER)
-        val source = if (countOn) raw.layers.take(MAX_LAYERS) else raw.layers
+        val layerLimit = if (countOn) SecuritySettings.maxLayers.coerceAtLeast(1) else Int.MAX_VALUE
+        val source = raw.layers.take(layerLimit)
 
         val layers = source.mapIndexed { index, layer ->
             val bind = layer.bindTo
             ShipLayer(
                 name = text(layer.name),
                 type = layer.type,
-                level = if (numberOn) layer.level.coerceIn(0, MAX_LEVEL) else layer.level,
+                level = if (numberOn) layer.level.coerceIn(0, 9999) else layer.level,
                 bindTo = if (!numberOn) bind
                 else if (bind in 1..raw.layers.size && bind - 1 != index) bind else -1,
-                imagePath = if (countOn && layer.imagePath.length > 512) "" else layer.imagePath,
+                imagePath = if (countOn && layer.imagePath.length > 1024) "" else layer.imagePath,
                 offsetX = coord(layer.offsetX),
                 offsetY = coord(layer.offsetY),
                 pivotX = coord(layer.pivotX),
@@ -56,10 +53,15 @@ object ShipDataGuard {
             )
         }
 
-        // 父链过长或成环的图层直接解绑，避免递归过深或渲染异常
+        // 环形绑定一律断开（不提供关闭开关）
+        layers.forEachIndexed { index, layer ->
+            if (layer.bindTo > 0 && hasCycle(layers, index)) layer.bindTo = -1
+        }
+        // 过深的父链按开关处理
         if (SecuritySettings.isOn(SecuritySettings.Check.DEPTH)) {
+            val maxDepth = SecuritySettings.maxDepth.coerceAtLeast(1)
             layers.forEachIndexed { index, layer ->
-                if (layer.bindTo > 0 && chainDepth(layers, index) > MAX_DEPTH) layer.bindTo = -1
+                if (layer.bindTo > 0 && chainDepth(layers, index) > maxDepth) layer.bindTo = -1
             }
         }
 
@@ -75,7 +77,19 @@ object ShipDataGuard {
         )
     }
 
-    private fun chainDepth(layers: List<ShipLayer>, start: Int): Int {
+    /** 沿父链向上走，若回到走过的节点即为环。 */
+    fun hasCycle(layers: List<ShipLayer>, start: Int): Boolean {
+        val seen = HashSet<Int>()
+        var current = start
+        while (true) {
+            if (!seen.add(current)) return true
+            val bind = layers.getOrNull(current)?.bindTo ?: return false
+            if (bind <= 0 || bind > layers.size) return false
+            current = bind - 1
+        }
+    }
+
+    fun chainDepth(layers: List<ShipLayer>, start: Int): Int {
         var depth = 0
         var current = start
         val seen = HashSet<Int>()
@@ -88,6 +102,20 @@ object ShipDataGuard {
             current = parent
         }
         return Int.MAX_VALUE
+    }
+
+    /** candidate 是否位于 root 的子树中（沿父链向上能找到 root）。 */
+    fun isInSubtree(layers: List<ShipLayer>, root: Int, candidate: Int): Boolean {
+        var current = candidate
+        val seen = HashSet<Int>()
+        while (current in layers.indices && seen.add(current)) {
+            val bind = layers[current].bindTo
+            if (bind <= 0 || bind > layers.size) return false
+            val parent = bind - 1
+            if (parent == root) return true
+            current = parent
+        }
+        return false
     }
 
     /** 图片路径必须落在应用自己的图层目录里，防止指向任意文件。 */
@@ -109,12 +137,14 @@ object ShipDataGuard {
         if (!file.exists()) return null
 
         val imageOn = SecuritySettings.isOn(SecuritySettings.Check.IMAGE)
-        if (imageOn && file.length() > MAX_IMAGE_BYTES) return null
+        if (imageOn && file.length() > SecuritySettings.imageBytes()) return null
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        if (imageOn && (bounds.outWidth > MAX_IMAGE_DIM || bounds.outHeight > MAX_IMAGE_DIM)) return null
+        if (imageOn && (bounds.outWidth > SecuritySettings.maxImageDim.coerceAtLeast(1) ||
+                bounds.outHeight > SecuritySettings.maxImageDim.coerceAtLeast(1))
+        ) return null
 
         val options = BitmapFactory.Options().apply {
             if (imageOn) inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 1024)
