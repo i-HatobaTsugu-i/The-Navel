@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.Editable
 import android.text.InputFilter
 import android.text.InputType
@@ -29,6 +30,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
+import java.util.Locale
 import kotlin.math.min
 
 class MainActivity : Activity() {
@@ -41,6 +43,9 @@ class MainActivity : Activity() {
     private var layersBox: LinearLayout? = null
     private var shipPreview: ShipPreviewView? = null
     private var pendingLayer = -1
+    private var devMode = false
+    private var logTaps = 0
+    private var lastLogTapAt = 0L
     private var currentPanel: View? = null
     private var currentScroll: android.widget.ScrollView? = null
 
@@ -288,7 +293,112 @@ class MainActivity : Activity() {
         }
         panel.addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+
+        // 连点纸张 5 次开启开发者模式（2 秒内计数）
+        panel.setOnClickListener {
+            val now = SystemClock.uptimeMillis()
+            if (now - lastLogTapAt > 2000) logTaps = 0
+            lastLogTapAt = now
+            logTaps++
+            if (logTaps >= 5) {
+                logTaps = 0
+                devMode = true
+                Toast.makeText(this, "开发者模式已开启", Toast.LENGTH_SHORT).show()
+                showDevPanel()
+            }
+        }
+
         showPaperPage(panel, panelWidth) { showMenu() }
+    }
+
+    // 开发者模式：实时调泡沫参数
+    private fun showDevPanel() {
+        val dp = resources.displayMetrics.density
+        val dialog = Dialog(this)
+        val panel = paperPanel()
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(TextView(this).apply {
+            text = "开发者模式 · 泡沫"
+            textSize = 20f
+            typeface = pixelFont
+            setTextColor(Color.parseColor("#2B2B2B"))
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        fun addRow(
+            label: String,
+            get: () -> Float,
+            set: (Float) -> Unit,
+            step: Float,
+            format: String = "%.4f"
+        ) {
+            val valueText = TextView(this).apply {
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#1F1F1F"))
+            }
+            fun refresh() {
+                valueText.text = String.format(Locale.US, format, get())
+            }
+            refresh()
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(TextView(this).apply {
+                text = label
+                textSize = 16f
+                typeface = pixelFont
+                setTextColor(Color.parseColor("#2B2B2B"))
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(valueText, LinearLayout.LayoutParams(
+                (76 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.END
+            })
+            row.addView(plainText("−", Color.parseColor("#1F5FA8")) {
+                set(get() - step)
+                refresh()
+            }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(plainText("＋", Color.parseColor("#1F5FA8")) {
+                set(get() + step)
+                refresh()
+            }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            column.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (10 * dp).toInt()
+            })
+        }
+
+        addRow("泡沫量", { OceanTuning.sourceGain },
+            { OceanTuning.sourceGain = it.coerceIn(0f, 0.02f) }, 0.0005f)
+        addRow("发射阈值", { OceanTuning.threshold },
+            { OceanTuning.threshold = it.coerceIn(0.5f, 0.95f) }, 0.01f, "%.2f")
+        addRow("速度 X", { OceanTuning.windX },
+            { OceanTuning.windX = it.coerceIn(0f, 1.5f) }, 0.04f, "%.2f")
+        addRow("速度 Y", { OceanTuning.windY },
+            { OceanTuning.windY = it.coerceIn(0f, 0.5f) }, 0.01f, "%.2f")
+        addRow("扩散", { OceanTuning.diffuse },
+            { OceanTuning.diffuse = it.coerceIn(0f, 0.05f) }, 0.001f)
+        addRow("衰减", { OceanTuning.decay },
+            { OceanTuning.decay = it.coerceIn(0.9f, 0.999f) }, 0.001f)
+
+        column.addView(linkButton("重置") {
+            OceanTuning.reset()
+            closeDialog(panel, dialog)
+            showDevPanel()
+        }, dialogButtonParams())
+        column.addView(linkButton("关闭") { closeDialog(panel, dialog) }, dialogButtonParams())
+
+        panel.addView(column, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        dialog.setContentView(panel)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            min((resources.displayMetrics.widthPixels - 60 * dp).toInt(), (460 * dp).toInt()),
+            LinearLayout.LayoutParams.WRAP_CONTENT)
+        dialog.show()
+        dialog.setCanceledOnTouchOutside(false)
+        popIn(panel)
     }
 
     // ---------- 鸣谢 ----------

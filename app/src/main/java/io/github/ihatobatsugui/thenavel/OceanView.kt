@@ -90,16 +90,16 @@ class OceanView @JvmOverloads constructor(
                 for (i in 0 until cols) {
                     val advected = sampleBilinear(
                         foamA,
-                        i - (WIND_X + curlX[idx] * CURL),
-                        j - (WIND_Y + curlY[idx] * CURL)
+                        i - (OceanTuning.windX + curlX[idx] * CURL),
+                        j - (OceanTuning.windY + curlY[idx] * CURL)
                     )
                     val left = foamA[j * cols + ((i - 1 + cols) % cols)]
                     val right = foamA[j * cols + (i + 1) % cols]
                     val up = foamA[((j - 1 + rows) % rows) * cols + i]
                     val down = foamA[((j + 1) % rows) * cols + i]
                     val average = (left + right + up + down) * 0.25f
-                    val diffused = advected + (average - advected) * DIFFUSE
-                    val value = (diffused * DECAY + sourceBuf[idx]).coerceIn(0f, 0.85f)
+                    val diffused = advected + (average - advected) * OceanTuning.diffuse
+                    val value = (diffused * OceanTuning.decay + sourceBuf[idx]).coerceIn(0f, 0.85f)
                     foamB[idx] = value
                     idx++
                 }
@@ -148,7 +148,7 @@ class OceanView @JvmOverloads constructor(
                 val bottom = convGrid[base + gridCols] +
                     (convGrid[base + gridCols + 1] - convGrid[base + gridCols]) * fx
                 val value = top + (bottom - top) * fy
-                sourceBuf[idx++] = max(0f, value - 0.74f) * SOURCE_GAIN
+                sourceBuf[idx++] = max(0f, value - OceanTuning.threshold) * OceanTuning.sourceGain
             }
         }
     }
@@ -219,12 +219,7 @@ class OceanView @JvmOverloads constructor(
         private const val GRID_STEP = 4
         private const val GRID_REFRESH = 5
         private const val OCTAVES = 2
-        private const val WIND_X = 0.38f
-        private const val WIND_Y = 0.07f
         private const val CURL = 0.08f
-        private const val DIFFUSE = 0.002f
-        private const val DECAY = 0.995f
-        private const val SOURCE_GAIN = 0.0040f
         // 源区本身也随同一股风漂移，否则会在原地不断补泡沫、最终铺成均匀薄雾
         private const val CONV_MOVE_X = 1.03f
         private const val CONV_MOVE_Y = 0.19f
