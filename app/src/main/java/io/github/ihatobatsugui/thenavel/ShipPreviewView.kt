@@ -136,8 +136,8 @@ class ShipPreviewView @JvmOverloads constructor(
     ) {
         val topY = (minY - 6f * density).coerceIn(textPaint.textSize + 2f, h - 1f)
         val leftX = (minX - 6f * density).coerceIn(1f, w - 1f)
-        val step = 10f * base            // 10 逻辑 px = 1m
-        val major = 50f * base           // 每 5m 一根长刻度
+        val step = 50f * base            // 50 逻辑 px = 5m
+
 
         canvas.drawLine(minX, topY, maxX, topY, tickPaint)
         canvas.drawLine(minX, topY - 4f * density, minX, topY + 4f * density, tickPaint)
