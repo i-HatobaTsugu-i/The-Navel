@@ -43,8 +43,7 @@ class ShipPreviewView @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
         // 预览按 432 设计画布缩放，位移单位与编辑器一致
-        val unit = minOf(w, h) / 432f
-
+        // 位移与转轴直接按预览像素计算（单位 px）
         layers.filter { it.imagePath.isNotBlank() }.forEach { layer ->
             val bitmap = cache.getOrPut(layer.imagePath) {
                 ShipDataGuard.decodeLayer(context, layer.imagePath)
@@ -52,13 +51,13 @@ class ShipPreviewView @JvmOverloads constructor(
             val scale = minOf(w * 0.9f / bitmap.width, h * 0.9f / bitmap.height)
             val dw = bitmap.width * scale
             val dh = bitmap.height * scale
-            val left = (w - dw) / 2f + layer.offsetX * unit
-            val top = (h - dh) / 2f + layer.offsetY * unit
+            val left = (w - dw) / 2f + layer.offsetX
+            val top = (h - dh) / 2f + layer.offsetY
             canvas.drawBitmap(bitmap, null, RectF(left, top, left + dw, top + dh), bitmapPaint)
 
             if (layer.type == LayerType.TURRET) {
-                val px = (w / 2f) + layer.pivotX * unit
-                val py = (h / 2f) + layer.pivotY * unit
+                val px = (w / 2f) + layer.pivotX
+                val py = (h / 2f) + layer.pivotY
                 val r = 4f * resources.displayMetrics.density
                 canvas.drawCircle(px, py, r, pivotPaint)
                 canvas.drawLine(px - r, py, px + r, py, pivotPaint)

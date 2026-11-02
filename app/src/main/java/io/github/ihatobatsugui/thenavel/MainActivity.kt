@@ -1258,7 +1258,7 @@ class MainActivity : Activity() {
         fun addRow(label: String, get: () -> Float, set: (Float) -> Unit, step: Float) {
             val ink = Color.parseColor("#1F1F1F")
             val display = InputDisplayView(this).apply {
-                text = String.format(Locale.US, "%.0f", get())
+                text = String.format(Locale.US, "%.1f", get())
                 textSize = 16f
                 typeface = pixelFont
                 setTextColor(ink)
@@ -1289,7 +1289,7 @@ class MainActivity : Activity() {
                 })
             }
             display.setOnClickListener {
-                input.setText(String.format(Locale.US, "%.0f", get()))
+                input.setText(String.format(Locale.US, "%.1f", get()))
                 input.setSelection(input.text.length)
                 input.requestFocus()
                 display.setBlinking(true)
@@ -1300,7 +1300,7 @@ class MainActivity : Activity() {
                 if (!hasFocus) {
                     display.setBlinking(false)
                     display.isPlaceholder = false
-                    display.text = String.format(Locale.US, "%.0f", get())
+                    display.text = String.format(Locale.US, "%.1f", get())
                 }
             }
 
@@ -1319,12 +1319,12 @@ class MainActivity : Activity() {
             row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
             row.addView(plainText("−", Color.parseColor("#1F5FA8")) {
                 set(get() - step)
-                display.text = String.format(Locale.US, "%.0f", get())
+                display.text = String.format(Locale.US, "%.1f", get())
                 applyChange()
             }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             row.addView(plainText("＋", Color.parseColor("#1F5FA8")) {
                 set(get() + step)
-                display.text = String.format(Locale.US, "%.0f", get())
+                display.text = String.format(Locale.US, "%.1f", get())
                 applyChange()
             }, LinearLayout.LayoutParams((32 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             column.addView(row, LinearLayout.LayoutParams(
@@ -1333,11 +1333,11 @@ class MainActivity : Activity() {
             })
         }
 
-        addRow("位移 X", { layer.offsetX }, { layer.offsetX = it }, 4f)
-        addRow("位移 Y", { layer.offsetY }, { layer.offsetY = it }, 4f)
+        addRow("位移 X（px）", { layer.offsetX }, { layer.offsetX = it }, 0.5f)
+        addRow("位移 Y（px）", { layer.offsetY }, { layer.offsetY = it }, 0.5f)
         if (layer.type == LayerType.TURRET) {
-            addRow("转轴 X", { layer.pivotX }, { layer.pivotX = it }, 4f)
-            addRow("转轴 Y", { layer.pivotY }, { layer.pivotY = it }, 4f)
+            addRow("转轴 X（px）", { layer.pivotX }, { layer.pivotX = it }, 0.5f)
+            addRow("转轴 Y（px）", { layer.pivotY }, { layer.pivotY = it }, 0.5f)
         }
 
         column.addView(linkButton("关闭") { closeDialog(panel, dialog) }, dialogButtonParams())
