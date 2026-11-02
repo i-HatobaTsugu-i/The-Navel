@@ -75,17 +75,12 @@ class MainActivity : Activity() {
             setPadding((16 * dp).toInt(), (24 * dp).toInt(), (16 * dp).toInt(), 0)
         }
         header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_anchor_title)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LinearLayout.LayoutParams((56 * dp).toInt(), (56 * dp).toInt()))
-
-        header.addView(ImageView(this).apply {
             setImageResource(R.drawable.ic_title)
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, (44 * dp).toInt()).apply {
-            marginStart = (10 * dp).toInt()
+            LinearLayout.LayoutParams.WRAP_CONTENT, (56 * dp).toInt()).apply {
+            marginStart = (4 * dp).toInt()
         })
         root.addView(header, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -550,7 +545,7 @@ class MainActivity : Activity() {
 
         content.addView(systemRow("船只代号", ShipStore.draft.code, "点击输入",
             InputType.TYPE_CLASS_TEXT, 24) { ShipStore.draft.code = it }, fieldParams(dp))
-        content.addView(systemRow("固定航速", ShipStore.draft.maxSpeed, "点击输入",
+        content.addView(systemRow("固定最大航速", ShipStore.draft.maxSpeed, "点击输入",
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, 8, suffix = "knots") {
             ShipStore.draft.maxSpeed = it
         }, fieldParams(dp))
@@ -1338,6 +1333,10 @@ class MainActivity : Activity() {
         if (layer.type == LayerType.TURRET) {
             addRow("转轴 X（px）", { layer.pivotX }, { layer.pivotX = it }, 0.5f)
             addRow("转轴 Y（px）", { layer.pivotY }, { layer.pivotY = it }, 0.5f)
+        }
+        if (layer.type == LayerType.SAIL) {
+            addRow("标准风速", { layer.windSpeed }, { layer.windSpeed = it }, 1f)
+            addRow("可提供最大速度", { layer.sailSpeed }, { layer.sailSpeed = it }, 1f)
         }
 
         column.addView(linkButton("关闭") { closeDialog(panel, dialog) }, dialogButtonParams())

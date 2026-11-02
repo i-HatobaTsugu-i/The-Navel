@@ -36,7 +36,10 @@ data class ShipLayer(
     var offsetX: Float = 0f,
     var offsetY: Float = 0f,
     var pivotX: Float = 0f,
-    var pivotY: Float = 0f
+    var pivotY: Float = 0f,
+    // 风帆：标准风速与该帆可提供的最大速度
+    var windSpeed: Float = 0f,
+    var sailSpeed: Float = 0f
 )
 
 data class Ship(
@@ -117,7 +120,9 @@ object ShipStore {
                                 offsetX = lo.optDouble("offsetX", 0.0).toFloat(),
                                 offsetY = lo.optDouble("offsetY", 0.0).toFloat(),
                                 pivotX = lo.optDouble("pivotX", 0.0).toFloat(),
-                                pivotY = lo.optDouble("pivotY", 0.0).toFloat()
+                                pivotY = lo.optDouble("pivotY", 0.0).toFloat(),
+                                windSpeed = lo.optDouble("windSpeed", 0.0).toFloat(),
+                                sailSpeed = lo.optDouble("sailSpeed", 0.0).toFloat()
                             )
                         )
                     }
@@ -164,6 +169,8 @@ object ShipStore {
                     lo.put("offsetY", layer.offsetY.toDouble())
                     lo.put("pivotX", layer.pivotX.toDouble())
                     lo.put("pivotY", layer.pivotY.toDouble())
+                    lo.put("windSpeed", layer.windSpeed.toDouble())
+                    lo.put("sailSpeed", layer.sailSpeed.toDouble())
                     layerArray.put(lo)
                 }
                 o.put("layers", layerArray)

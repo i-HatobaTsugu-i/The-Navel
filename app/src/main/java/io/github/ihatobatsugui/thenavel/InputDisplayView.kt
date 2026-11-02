@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.view.Gravity
 import android.widget.TextView
 
 /**
@@ -45,14 +46,24 @@ class InputDisplayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         if (blinking && isPlaceholder) {
-            // 编辑空字段时隐藏占位文字，只在起始位置画光标
-            if (caretOn) drawCaret(canvas, paddingLeft.toFloat())
+            // 编辑空字段时隐藏占位文字，只在文字起始位置画光标
+            if (caretOn) drawCaret(canvas, textStartX(0f))
             return
         }
         super.onDraw(canvas)
         if (!blinking || !caretOn) return
         val textWidth = paint.measureText(text.toString())
-        drawCaret(canvas, paddingLeft + textWidth + 2f)
+        drawCaret(canvas, textStartX(textWidth) + textWidth + 2f)
+    }
+
+    /** 根据对齐方式算出文字起始 x（右对齐时光标才不会跑到数字前面）。 */
+    private fun textStartX(textWidth: Float): Float {
+        val available = (width - paddingLeft - paddingRight).toFloat()
+        return when (gravity and Gravity.HORIZONTAL_GRAVITY_MASK) {
+            Gravity.RIGHT -> width - paddingRight - textWidth
+            Gravity.CENTER_HORIZONTAL -> paddingLeft + (available - textWidth) / 2f
+            else -> paddingLeft.toFloat()
+        }
     }
 
     private fun drawCaret(canvas: Canvas, x: Float) {

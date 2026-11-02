@@ -49,7 +49,9 @@ object ShipDataGuard {
                 offsetX = coord(layer.offsetX),
                 offsetY = coord(layer.offsetY),
                 pivotX = coord(layer.pivotX),
-                pivotY = coord(layer.pivotY)
+                pivotY = coord(layer.pivotY),
+                windSpeed = coord(layer.windSpeed),
+                sailSpeed = coord(layer.sailSpeed)
             )
         }
 
