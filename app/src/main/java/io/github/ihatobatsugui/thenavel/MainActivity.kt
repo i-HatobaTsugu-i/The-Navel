@@ -538,10 +538,13 @@ class MainActivity : Activity() {
 
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        val preview = ShipPreviewView(this).apply { layers = ShipStore.draft.layers }
+        val preview = ShipPreviewView(this).apply {
+            layers = ShipStore.draft.layers
+            showRuler = true
+        }
         shipPreview = preview
         content.addView(preview, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (110 * dp).toInt()))
+            LinearLayout.LayoutParams.MATCH_PARENT, (130 * dp).toInt()))
 
         content.addView(systemRow("船只代号", ShipStore.draft.code, "点击输入",
             InputType.TYPE_CLASS_TEXT, 24) { ShipStore.draft.code = it }, fieldParams(dp))
@@ -1244,6 +1247,21 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, (150 * dp).toInt()).apply {
             topMargin = (8 * dp).toInt()
         })
+
+        val zoomRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        zoomRow.addView(linkButton("放大 +") { preview.zoom = preview.zoom * 1.25f },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        zoomRow.addView(linkButton("缩小 −") { preview.zoom = preview.zoom / 1.25f },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = (12 * dp).toInt()
+            })
+        column.addView(zoomRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun applyChange() {
             preview.refresh()
