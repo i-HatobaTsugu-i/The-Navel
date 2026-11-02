@@ -70,8 +70,10 @@ class InputDisplayView @JvmOverloads constructor(
         val top = paddingTop + 2f
         val bottom = height - paddingBottom - 2f
         if (bottom <= top) return
+        // 右对齐时贴右边界，需夹回可见范围内，否则光标会画到控件外侧而看不见
+        val caretX = x.coerceIn(paddingLeft.toFloat(), width - paddingRight - 2f)
         caretPaint.color = currentTextColor
-        canvas.drawRect(x, top, x + 2f, bottom, caretPaint)
+        canvas.drawRect(caretX, top, caretX + 2f, bottom, caretPaint)
     }
 
     override fun onDetachedFromWindow() {

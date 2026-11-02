@@ -390,7 +390,7 @@ class MainActivity : Activity() {
                 setTextColor(Color.parseColor("#2B2B2B"))
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             row.addView(display, LinearLayout.LayoutParams(
-                (92 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+                (100 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
             row.addView(plainText("−", Color.parseColor("#1F5FA8")) {
                 set(get() - step)
@@ -1310,7 +1310,7 @@ class MainActivity : Activity() {
                 setTextColor(Color.parseColor("#2B2B2B"))
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             row.addView(display, LinearLayout.LayoutParams(
-                (92 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+                (100 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             row.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
             row.addView(plainText("−", Color.parseColor("#1F5FA8")) {
                 set(get() - step)
@@ -1504,7 +1504,7 @@ class MainActivity : Activity() {
             }
 
             top.addView(display, LinearLayout.LayoutParams(
-                (104 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+                (124 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             top.addView(input, LinearLayout.LayoutParams((1 * dp).toInt(), (1 * dp).toInt()))
             top.addView(stateView(getOn, setOn))
 
