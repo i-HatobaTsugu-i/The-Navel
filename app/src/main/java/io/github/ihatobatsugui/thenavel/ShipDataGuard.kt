@@ -149,7 +149,7 @@ object ShipDataGuard {
         ) return null
 
         val options = BitmapFactory.Options().apply {
-            if (imageOn) inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 1024)
+            if (imageOn) inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 2048)
         }
         return runCatching { BitmapFactory.decodeFile(path, options) }.getOrNull()
     }

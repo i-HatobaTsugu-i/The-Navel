@@ -8,13 +8,14 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 
 /**
  * 船只俯视图：按图层顺序叠加导入的图片。
- * 坐标统一以「图层图片像素」为单位（相对画布中心），先算出所有图层的整体范围，
- * 再等比缩放到预览区域内，所以不同尺寸的预览看到的相对位置一致。
- * 1px = 0.1m，用于刻度与长宽量取。
+ * 坐标以图层图片像素为单位（相对画布中心），量取与取景都只看「有像素的内容」，
+ * 图片四周的透明留白会被忽略。1px = 0.1m。
  */
 class ShipPreviewView @JvmOverloads constructor(
     context: Context,
@@ -27,19 +28,30 @@ class ShipPreviewView @JvmOverloads constructor(
             invalidate()
         }
 
-    /** 显示刻度尺与长宽量取（船只编辑器用） */
+    /** 显示刻度尺与长宽量取 */
     var showRuler = false
         set(value) {
             field = value
             invalidate()
         }
 
-    /** 放大倍数，围绕预览中心缩放 */
-    var zoom = 1f
+    /** 允许双指缩放与拖动 */
+    var interactive = false
         set(value) {
-            field = value.coerceIn(0.3f, 4f)
+            field = value
             invalidate()
         }
+
+    var zoom = 1f
+        set(value) {
+            field = value.coerceIn(0.3f, 6f)
+            invalidate()
+        }
+
+    private var panX = 0f
+    private var panY = 0f
+    private var lastX = 0f
+    private var lastY = 0f
 
     private val density = resources.displayMetrics.density
     private val bitmapPaint = Paint().apply { isFilterBitmap = false }
@@ -71,9 +83,45 @@ class ShipPreviewView @JvmOverloads constructor(
         color = Color.parseColor("#1F5FA8")
     }
     private val cache = HashMap<String, Bitmap?>()
+    private val opaqueCache = HashMap<String, RectF>()
+
+    private val scaleDetector = ScaleGestureDetector(
+        context,
+        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                zoom = zoom * detector.scaleFactor
+                return true
+            }
+        }
+    )
 
     fun refresh() {
         invalidate()
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!interactive) return super.onTouchEvent(event)
+        scaleDetector.onTouchEvent(event)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastX = event.x
+                lastY = event.y
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!scaleDetector.isInProgress) {
+                    panX += event.x - lastX
+                    panY += event.y - lastY
+                    lastX = event.x
+                    lastY = event.y
+                    invalidate()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                lastX = 0f
+                lastY = 0f
+            }
+        }
+        return true
     }
 
     private class Item(val bitmap: Bitmap, val layer: ShipLayer, val rect: RectF)
@@ -93,16 +141,15 @@ class ShipPreviewView @JvmOverloads constructor(
             val bitmap = cache.getOrPut(layer.imagePath) {
                 ShipDataGuard.decodeLayer(context, layer.imagePath)
             } ?: return@forEach
-            val halfW = bitmap.width / 2f
-            val halfH = bitmap.height / 2f
+            val ink = opaqueRect(layer.imagePath, bitmap)
             items.add(
                 Item(
                     bitmap, layer,
                     RectF(
-                        -halfW + layer.offsetX,
-                        -halfH + layer.offsetY,
-                        halfW + layer.offsetX,
-                        halfH + layer.offsetY
+                        ink.left + layer.offsetX,
+                        ink.top + layer.offsetY,
+                        ink.right + layer.offsetX,
+                        ink.bottom + layer.offsetY
                     )
                 )
             )
@@ -122,11 +169,11 @@ class ShipPreviewView @JvmOverloads constructor(
 
         val contentW = (r - l).coerceAtLeast(1f)
         val contentH = (b - t).coerceAtLeast(1f)
-        // 留出边距给刻度和船首箭头
-        val fit = minOf(w * 0.88f / contentW, h * 0.78f / contentH)
+        // 只按有内容的部分取景，四周留出刻度与箭头的位置
+        val fit = minOf(w * 0.86f / contentW, h * 0.74f / contentH)
         val scale = fit * zoom
-        val ox = w / 2f - (l + r) / 2f * scale
-        val oy = h / 2f - (t + b) / 2f * scale
+        val ox = w / 2f - (l + r) / 2f * scale + panX
+        val oy = h / 2f - (t + b) / 2f * scale + panY
 
         items.forEach { item ->
             val rect = item.rect
@@ -151,6 +198,35 @@ class ShipPreviewView @JvmOverloads constructor(
         }
 
         if (showRuler) drawRuler(canvas, w, h, scale, ox, oy, l, t, r, b)
+    }
+
+    /** 图片里真正有像素的范围（相对图片中心），用于取景与量取 */
+    private fun opaqueRect(key: String, bitmap: Bitmap): RectF {
+        opaqueCache[key]?.let { return it }
+        var l = bitmap.width
+        var t = bitmap.height
+        var r = -1
+        var b = -1
+        val step = if (bitmap.width > 600) 2 else 1
+        for (y in 0 until bitmap.height step step) {
+            for (x in 0 until bitmap.width step step) {
+                if (Color.alpha(bitmap.getPixel(x, y)) > 8) {
+                    if (x < l) l = x
+                    if (y < t) t = y
+                    if (x > r) r = x
+                    if (y > b) b = y
+                }
+            }
+        }
+        val halfW = bitmap.width / 2f
+        val halfH = bitmap.height / 2f
+        val rect = if (r < 0) {
+            RectF(-halfW, -halfH, halfW, halfH)
+        } else {
+            RectF(l - halfW, t - halfH, r + 1 - halfW, b + 1 - halfH)
+        }
+        opaqueCache[key] = rect
+        return rect
     }
 
     /** 顶部量长、左侧量宽，单位米（1px = 0.1m） */

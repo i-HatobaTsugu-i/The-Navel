@@ -1241,27 +1241,14 @@ class MainActivity : Activity() {
 
         val preview = ShipPreviewView(this).apply {
             layers = ShipStore.draft.layers
+            showRuler = true
+            interactive = true
             setBackgroundColor(Color.parseColor("#E4DDCB"))
         }
         column.addView(preview, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (150 * dp).toInt()).apply {
+            LinearLayout.LayoutParams.MATCH_PARENT, (170 * dp).toInt()).apply {
             topMargin = (8 * dp).toInt()
         })
-
-        val zoomRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.START
-        }
-        zoomRow.addView(linkButton("放大 +") { preview.zoom = preview.zoom * 1.25f },
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        zoomRow.addView(linkButton("缩小 −") { preview.zoom = preview.zoom / 1.25f },
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = (12 * dp).toInt()
-            })
-        column.addView(zoomRow, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun applyChange() {
             preview.refresh()
