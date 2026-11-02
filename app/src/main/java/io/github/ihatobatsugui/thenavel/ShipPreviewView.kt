@@ -124,7 +124,7 @@ class ShipPreviewView @JvmOverloads constructor(
         return true
     }
 
-    private class Item(val bitmap: Bitmap, val layer: ShipLayer, val rect: RectF)
+    private class Item(val bitmap: Bitmap, val layer: ShipLayer, val draw: RectF, val ink: RectF)
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -145,6 +145,14 @@ class ShipPreviewView @JvmOverloads constructor(
             items.add(
                 Item(
                     bitmap, layer,
+                    // 绘制用整张图的范围
+                    RectF(
+                        -bitmap.width / 2f + layer.offsetX,
+                        -bitmap.height / 2f + layer.offsetY,
+                        bitmap.width / 2f + layer.offsetX,
+                        bitmap.height / 2f + layer.offsetY
+                    ),
+                    // 取景/量取只用有像素的部分
                     RectF(
                         ink.left + layer.offsetX,
                         ink.top + layer.offsetY,
@@ -161,10 +169,10 @@ class ShipPreviewView @JvmOverloads constructor(
         var r = -Float.MAX_VALUE
         var b = -Float.MAX_VALUE
         items.forEach { item ->
-            l = minOf(l, item.rect.left)
-            t = minOf(t, item.rect.top)
-            r = maxOf(r, item.rect.right)
-            b = maxOf(b, item.rect.bottom)
+            l = minOf(l, item.ink.left)
+            t = minOf(t, item.ink.top)
+            r = maxOf(r, item.ink.right)
+            b = maxOf(b, item.ink.bottom)
         }
 
         val contentW = (r - l).coerceAtLeast(1f)
@@ -176,7 +184,7 @@ class ShipPreviewView @JvmOverloads constructor(
         val oy = h / 2f - (t + b) / 2f * scale + panY
 
         items.forEach { item ->
-            val rect = item.rect
+            val rect = item.draw
             canvas.drawBitmap(
                 item.bitmap, null,
                 RectF(
