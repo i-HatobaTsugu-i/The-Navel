@@ -544,7 +544,7 @@ class MainActivity : Activity() {
         }
         shipPreview = preview
         content.addView(preview, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (130 * dp).toInt()))
+            LinearLayout.LayoutParams.MATCH_PARENT, (150 * dp).toInt()))
 
         content.addView(systemRow("船只代号", ShipStore.draft.code, "点击输入",
             InputType.TYPE_CLASS_TEXT, 24) { ShipStore.draft.code = it }, fieldParams(dp))
