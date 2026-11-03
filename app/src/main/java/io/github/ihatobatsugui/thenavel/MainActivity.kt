@@ -928,6 +928,11 @@ class MainActivity : Activity() {
         })
 
         // 导入图片
+        row.addView(LayerThumbView(this).apply { path = layer.imagePath },
+            LinearLayout.LayoutParams((30 * dp).toInt(), (30 * dp).toInt()).apply {
+                marginStart = (6 * dp).toInt()
+            })
+
         row.addView(iconView(R.drawable.ic_download) { pickImage(index) },
             LinearLayout.LayoutParams((28 * dp).toInt(), (28 * dp).toInt()).apply {
                 marginStart = (6 * dp).toInt()
